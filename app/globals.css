@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --grain-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/></svg>");
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  background-color: #f2e8d3;
+}
+
+body {
+  color: #2c231b;
+  position: relative;
+  min-height: 100dvh;
+}
+
+/* Subtle, static film-grain overlay across the whole page. Fixed so it never
+   tiles awkwardly as content scrolls, and it never animates — grain that
+   moves reads as a loading spinner, not paper. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--grain-image);
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+}
+
+body > div#__next,
+main {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* A strip of film-perforation marks, used as a quiet top/bottom border
+   motif. Pure decoration, kept small and low-contrast. */
+.sprocket-strip {
+  height: 10px;
+  width: 100%;
+  background-image: repeating-linear-gradient(
+    to right,
+    #2c231b 0,
+    #2c231b 5px,
+    transparent 5px,
+    transparent 17px
+  );
+  background-position: center;
+  opacity: 0.18;
+  border-radius: 2px;
+}
+
+/* Visible focus ring, kept in the theme's ink color instead of the browser
+   default blue, without removing focus visibility. */
+:focus-visible {
+  outline: 2px solid #a8432b;
+  outline-offset: 2px;
+}
+
+.font-display {
+  font-family: var(--font-fraunces), Georgia, serif;
+}
+
+.font-stamp {
+  font-family: var(--font-stamp), 'Courier New', monospace;
+}
