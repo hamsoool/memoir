@@ -2,7 +2,7 @@ export type UploadStatus = 'queued' | 'uploading' | 'done' | 'error';
 
 export interface UploadItem {
   id: string;
-  file: File;
+  file?: File;
   previewUrl: string;
   kind: 'image' | 'video';
   status: UploadStatus;
@@ -10,6 +10,10 @@ export interface UploadItem {
   error?: string;
   url?: string;
   key?: string;
+  bytes?: number;
+  name?: string;
+  createdAt?: string;
+  isTrashed?: boolean;
 }
 
 // Shape returned by POST /api/upload once it's wired to real storage.

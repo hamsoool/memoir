@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { uploadBufferToCloudinary, isCloudinaryConfigured } from '@/lib/cloudinary';
+import { sendToDiscord } from '@/lib/discord';
 
 export const runtime = 'nodejs';
 
@@ -43,6 +44,14 @@ export async function POST(request: Request) {
 
       const result = await uploadBufferToCloudinary(buffer, {
         resourceType: 'auto',
+      });
+
+      // Notify Discord channel asynchronously (if DISCORD_WEBHOOK_URL is configured)
+      await sendToDiscord({
+        filename: file.name,
+        url: result.secure_url,
+        kind: file.type.startsWith('video/') ? 'video' : 'image',
+        publicId: result.public_id,
       });
 
       return NextResponse.json({

@@ -42,19 +42,8 @@ main {
   z-index: 1;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
 /* A strip of film-perforation marks, used as a quiet top/bottom border
-   motif. Pure decoration, kept small and low-contrast. */
+   motif. Slowly rolls horizontally to simulate film advancing through a camera. */
 .sprocket-strip {
   height: 10px;
   width: 100%;
@@ -66,8 +55,179 @@ main {
     transparent 17px
   );
   background-position: center;
-  opacity: 0.18;
+  opacity: 0.22;
   border-radius: 2px;
+  animation: roll-sprocket-horizontal 16s linear infinite;
+}
+
+@keyframes roll-sprocket-horizontal {
+  from {
+    background-position-x: 0px;
+  }
+  to {
+    background-position-x: 68px;
+  }
+}
+
+/* 35mm vertical rolling tape loop */
+@keyframes roll-tape-down {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(0, -50%, 0);
+  }
+}
+
+.animate-roll-tape-down {
+  animation: roll-tape-down 24s linear infinite;
+  will-change: transform;
+}
+
+/* Ambient projector beam breathing */
+@keyframes projector-breathe {
+  0%, 100% {
+    opacity: 0.65;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.88;
+    transform: scale(1.02);
+  }
+}
+
+.animate-projector-breathe {
+  animation: projector-breathe 12s ease-in-out infinite;
+}
+
+.bg-radial-vignette {
+  background: radial-gradient(
+    ellipse at 50% 30%,
+    rgba(251, 246, 234, 0.6) 0%,
+    rgba(242, 232, 211, 0.25) 50%,
+    rgba(44, 35, 27, 0.09) 100%
+  );
+}
+
+/* Subtle vintage celluloid dust / particles */
+@keyframes float-dust {
+  0% {
+    transform: translate3d(0, -10px, 0) rotate(0deg);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.45;
+  }
+  75% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translate3d(35px, 100vh, 0) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.film-dust {
+  position: absolute;
+  border-radius: 50%;
+  background-color: #2c231b;
+  pointer-events: none;
+}
+
+.dust-1 {
+  width: 2.5px;
+  height: 2.5px;
+  left: 18%;
+  animation: float-dust 17s linear infinite;
+  animation-delay: 0s;
+}
+
+.dust-2 {
+  width: 3px;
+  height: 2px;
+  left: 48%;
+  animation: float-dust 23s linear infinite;
+  animation-delay: 5s;
+}
+
+.dust-3 {
+  width: 2px;
+  height: 2px;
+  left: 72%;
+  animation: float-dust 19s linear infinite;
+  animation-delay: 10s;
+}
+
+.dust-4 {
+  width: 1.5px;
+  height: 3px;
+  left: 85%;
+  animation: float-dust 15s linear infinite;
+  animation-delay: 3s;
+}
+
+.bg-scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(44, 35, 27, 0.25) 3px,
+    rgba(44, 35, 27, 0.25) 4px
+  );
+}
+
+/* Dual tape spool rotation */
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 12s linear infinite;
+  will-change: transform;
+}
+
+/* Organic analog lens light leaks */
+@keyframes light-leak {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translate3d(40px, 30px, 0) scale(1.15);
+    opacity: 0.65;
+  }
+  100% {
+    transform: translate3d(10px, 60px, 0) scale(0.95);
+    opacity: 0.4;
+  }
+}
+
+@keyframes light-leak-delayed {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translate3d(-50px, -40px, 0) scale(1.2);
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate3d(-20px, -20px, 0) scale(0.9);
+    opacity: 0.3;
+  }
+}
+
+.animate-light-leak {
+  animation: light-leak 14s ease-in-out infinite alternate;
+}
+
+.animate-light-leak-delayed {
+  animation: light-leak-delayed 18s ease-in-out infinite alternate;
 }
 
 /* Visible focus ring, kept in the theme's ink color instead of the browser

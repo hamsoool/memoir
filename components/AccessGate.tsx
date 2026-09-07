@@ -49,7 +49,7 @@ export default function AccessGate({ onUnlock }: { onUnlock: () => void }) {
           className="w-full text-center bg-paper border border-line rounded-sm px-4 py-3 text-ink font-stamp tracking-widest placeholder:text-ink/30 focus:border-rust transition-colors"
         />
         {wrong && (
-          <p className="text-rust text-sm mt-3">That's not it — try again.</p>
+          <p className="text-rust text-sm mt-3">That&apos;s not it — try again.</p>
         )}
         <button
           type="submit"

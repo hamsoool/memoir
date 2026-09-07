@@ -34,6 +34,8 @@ export const viewport: Viewport = {
   maximumScale: 1,
 };
 
+import VintageFilmBackground from '@/components/VintageFilmBackground';
+
 export default function RootLayout({
   children,
 }: {
@@ -41,7 +43,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${fraunces.variable} ${specialElite.variable}`}>
-      <body>{children}</body>
+      <body>
+        <VintageFilmBackground />
+        {children}
+      </body>
     </html>
   );
 }
