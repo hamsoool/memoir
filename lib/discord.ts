@@ -212,7 +212,7 @@ export async function sendPhotoStripToDiscord(
 
   try {
     const filename = options.filename || 'memoir-photo-strip.png';
-    const blob = new Blob([options.buffer], { type: 'image/png' });
+    const blob = new Blob([options.buffer as unknown as BlobPart], { type: 'image/png' });
 
     const formData = new FormData();
     formData.append('files[0]', blob, filename);
