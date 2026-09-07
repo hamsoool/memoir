@@ -15,8 +15,8 @@ type SortField = 'date' | 'size' | 'type';
 type SortOrder = 'desc' | 'asc';
 
 export default function Page() {
-  const needsGate = Boolean(process.env.NEXT_PUBLIC_ACCESS_CODE);
-  const [unlocked, setUnlocked] = useState(!needsGate);
+  const clientNeedsGate = Boolean(process.env.NEXT_PUBLIC_ACCESS_CODE);
+  const [unlocked, setUnlocked] = useState(!clientNeedsGate && isAlreadyUnlocked());
   const [isDevelopingIntro, setIsDevelopingIntro] = useState<boolean>(false);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [pendingItems, setPendingItems] = useState<UploadItem[]>([]);
@@ -31,33 +31,38 @@ export default function Page() {
 
   useEffect(() => {
     async function checkExistingSession() {
-      if (needsGate) {
-        // Fast local session check
-        if (isAlreadyUnlocked()) {
-          setUnlocked(true);
-          setIsDevelopingIntro(true);
-          return;
-        }
+      // 1. Fast local session check
+      if (isAlreadyUnlocked()) {
+        setUnlocked(true);
+        setIsDevelopingIntro(true);
+        return;
+      }
 
-        // Upstash Redis 90-day device cookie or IP check
-        try {
-          const res = await fetch('/api/auth/session');
-          const data = await res.json();
-          if (data.ok && data.authenticated) {
+      // 2. Query Upstash Redis session & server-side gate requirement
+      try {
+        const res = await fetch('/api/auth/session');
+        const data = await res.json();
+
+        if (data.ok) {
+          if (!data.gateRequired || data.authenticated) {
             setUnlocked(true);
             setIsDevelopingIntro(true);
             return;
           }
-        } catch (err) {
-          console.error('Failed to check 90-day session from Upstash:', err);
         }
-      } else {
+      } catch (err) {
+        console.error('Failed to check session from server:', err);
+      }
+
+      // If no passcode gate was set in client either, unlock
+      if (!clientNeedsGate) {
+        setUnlocked(true);
         setIsDevelopingIntro(true);
       }
     }
 
     checkExistingSession();
-  }, [needsGate]);
+  }, [clientNeedsGate]);
 
   const loadMediaFromCloudinary = useCallback(async () => {
     try {

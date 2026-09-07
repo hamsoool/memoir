@@ -60,14 +60,19 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const gateRequired = Boolean(
+      (process.env.ACCESS_CODE || process.env.NEXT_PUBLIC_ACCESS_CODE || '').trim()
+    );
+
     return NextResponse.json({
       ok: true,
       authenticated: false,
+      gateRequired,
     });
   } catch (err) {
     console.error('Session check error:', err);
     return NextResponse.json(
-      { ok: false, authenticated: false, error: 'Session check failed' },
+      { ok: false, authenticated: false, gateRequired: true, error: 'Session check failed' },
       { status: 500 }
     );
   }
