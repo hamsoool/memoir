@@ -6,6 +6,7 @@ import DropZone from '@/components/DropZone';
 import UploadGrid from '@/components/UploadGrid';
 import AccessGate, { isAlreadyUnlocked } from '@/components/AccessGate';
 import ConfirmUploadModal from '@/components/ConfirmUploadModal';
+import DevelopingSplash from '@/components/DevelopingSplash';
 import { uploadFile } from '@/lib/uploadClient';
 import { fileKind, formatBytes, groupMemories, makeId } from '@/lib/format';
 import type { UploadItem } from '@/lib/types';
@@ -16,6 +17,7 @@ type SortOrder = 'desc' | 'asc';
 export default function Page() {
   const needsGate = Boolean(process.env.NEXT_PUBLIC_ACCESS_CODE);
   const [unlocked, setUnlocked] = useState(!needsGate);
+  const [isDevelopingIntro, setIsDevelopingIntro] = useState<boolean>(false);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [pendingItems, setPendingItems] = useState<UploadItem[]>([]);
   const [isLoadingMedia, setIsLoadingMedia] = useState<boolean>(true);
@@ -28,7 +30,33 @@ export default function Page() {
   const [isDeckMode, setIsDeckMode] = useState<boolean>(true);
 
   useEffect(() => {
-    if (needsGate && isAlreadyUnlocked()) setUnlocked(true);
+    async function checkExistingSession() {
+      if (needsGate) {
+        // Fast local session check
+        if (isAlreadyUnlocked()) {
+          setUnlocked(true);
+          setIsDevelopingIntro(true);
+          return;
+        }
+
+        // Upstash Redis 90-day device cookie or IP check
+        try {
+          const res = await fetch('/api/auth/session');
+          const data = await res.json();
+          if (data.ok && data.authenticated) {
+            setUnlocked(true);
+            setIsDevelopingIntro(true);
+            return;
+          }
+        } catch (err) {
+          console.error('Failed to check 90-day session from Upstash:', err);
+        }
+      } else {
+        setIsDevelopingIntro(true);
+      }
+    }
+
+    checkExistingSession();
   }, [needsGate]);
 
   const loadMediaFromCloudinary = useCallback(async () => {
@@ -370,13 +398,25 @@ export default function Page() {
       : `${usedPercentage.toFixed(2)}%`;
   const remainingBytes = Math.max(0, MAX_STORAGE_BYTES - totalUploadedBytes);
 
+  function handleUnlock() {
+    setUnlocked(true);
+    setIsDevelopingIntro(true);
+  }
+
   if (!unlocked) {
-    return <AccessGate onUnlock={() => setUnlocked(true)} />;
+    return <AccessGate onUnlock={handleUnlock} />;
   }
 
   return (
-    <main className="min-h-dvh px-4 sm:px-6 md:px-8 py-6 sm:py-10 max-w-4xl mx-auto">
-      <div className="sprocket-strip mb-6 sm:mb-7" />
+    <>
+      {isDevelopingIntro && (
+        <DevelopingSplash
+          onComplete={() => setIsDevelopingIntro(false)}
+          isLoadingMedia={isLoadingMedia}
+        />
+      )}
+      <main className="min-h-dvh px-4 sm:px-6 md:px-8 py-6 sm:py-10 max-w-4xl mx-auto">
+        <div className="sprocket-strip mb-6 sm:mb-7" />
 
       <FilmHeader count={activeItems.length} />
 
@@ -834,6 +874,7 @@ export default function Page() {
       <p className="text-center font-stamp text-[11px] text-ink/40 mt-4">
         This memoir stays between the two of us.
       </p>
-    </main>
+      </main>
+    </>
   );
 }

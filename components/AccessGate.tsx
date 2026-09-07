@@ -12,16 +12,40 @@ export function isAlreadyUnlocked(): boolean {
 export default function AccessGate({ onUnlock }: { onUnlock: () => void }) {
   const [code, setCode] = useState('');
   const [wrong, setWrong] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const expected = process.env.NEXT_PUBLIC_ACCESS_CODE;
-    if (!expected || code === expected) {
-      window.sessionStorage.setItem(SESSION_KEY, 'true');
-      onUnlock();
-    } else {
-      setWrong(true);
-      setCode('');
+    if (!code.trim()) return;
+
+    try {
+      setIsVerifying(true);
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code.trim() }),
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        window.sessionStorage.setItem(SESSION_KEY, 'true');
+        onUnlock();
+      } else {
+        setWrong(true);
+        setCode('');
+      }
+    } catch {
+      // Offline fallback
+      const expected = process.env.NEXT_PUBLIC_ACCESS_CODE?.trim();
+      if (!expected || code.trim() === expected) {
+        window.sessionStorage.setItem(SESSION_KEY, 'true');
+        onUnlock();
+      } else {
+        setWrong(true);
+        setCode('');
+      }
+    } finally {
+      setIsVerifying(false);
     }
   }
 
@@ -46,6 +70,7 @@ export default function AccessGate({ onUnlock }: { onUnlock: () => void }) {
             setWrong(false);
           }}
           placeholder="Passcode"
+          disabled={isVerifying}
           className="w-full text-center bg-paper border border-line rounded-sm px-4 py-3 text-ink font-stamp tracking-widest placeholder:text-ink/30 focus:border-rust transition-colors"
         />
         {wrong && (
@@ -53,10 +78,19 @@ export default function AccessGate({ onUnlock }: { onUnlock: () => void }) {
         )}
         <button
           type="submit"
-          className="mt-5 w-full bg-rust hover:bg-rust-dark active:scale-[0.98] transition text-paper-light rounded-sm py-3 font-medium"
+          disabled={isVerifying}
+          className="mt-5 w-full bg-rust hover:bg-rust-dark active:scale-[0.98] transition text-paper-light rounded-sm py-3 font-medium disabled:opacity-60"
         >
-          Unlock
+          {isVerifying ? 'Checking passcode…' : 'Unlock'}
         </button>
+
+        <p className="font-stamp text-[10px] text-ink/40 mt-4 flex items-center justify-center gap-1.5">
+          <svg className="w-3 h-3 text-ink/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          <span>Remembers your device & IP for 90 days</span>
+        </p>
       </form>
     </main>
   );
