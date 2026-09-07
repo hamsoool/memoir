@@ -97,13 +97,13 @@ export default function DropZone({
         type="button"
         onClick={() => inputRef.current?.click()}
         className="group flex items-center gap-2.5 rounded-full bg-rust hover:bg-rust-dark
-          active:scale-[0.97] transition-all text-paper-light pl-1.5 pr-4 sm:pr-5 py-1.5 shadow-print text-xs sm:text-sm"
+          active:scale-[0.97] transition-all text-paper-light pl-1.5 pr-4 sm:pr-5 py-1.5 shadow-print text-xs sm:text-sm font-display italic"
         aria-label="Add a memory"
       >
         <span className="flex items-center justify-center w-8 h-8 sm:w-7 sm:h-7 rounded-full bg-paper-light">
           <span className="w-5 h-5 sm:w-4 sm:h-4 rounded-full bg-rust group-active:bg-rust-dark transition-colors" />
         </span>
-        <span className="font-medium tracking-wide">Add a memory</span>
+        <span className="font-medium tracking-wide text-sm sm:text-base">Add a memory</span>
       </button>
     </div>
   );

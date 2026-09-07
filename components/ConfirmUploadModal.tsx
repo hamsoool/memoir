@@ -139,21 +139,21 @@ export default function ConfirmUploadModal({
         )}
 
         {/* Action buttons */}
-        <div className="p-3.5 sm:p-4 flex items-center justify-end gap-2.5 bg-paper-light">
+        <div className="p-3.5 sm:p-4 flex items-center justify-end gap-2.5 bg-paper-light border-t border-line/60">
           <button
             type="button"
             onClick={onCancel}
-            className="px-3.5 py-2 rounded-sm border border-line hover:border-ink/40 text-ink/70 hover:text-ink font-stamp text-xs transition"
+            className="px-4 py-2 rounded-sm border border-line hover:border-ink/40 text-ink/70 hover:text-ink font-display italic text-sm transition"
           >
             Discard
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="px-4.5 py-2 rounded-sm bg-rust hover:bg-rust-dark text-paper-light font-medium text-xs sm:text-sm active:scale-[0.98] transition shadow-xs flex items-center gap-2"
+            className="px-5 py-2.5 rounded-sm bg-rust hover:bg-rust-dark text-paper-light font-display italic font-medium text-sm sm:text-base active:scale-[0.98] transition shadow-xs flex items-center gap-2"
           >
             <span>Confirm & Develop</span>
-            <span className="font-stamp text-[11px] opacity-80">
+            <span className="font-stamp text-xs opacity-90 not-italic ml-0.5">
               ({items.length})
             </span>
           </button>

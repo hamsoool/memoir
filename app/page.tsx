@@ -6,6 +6,7 @@ import DropZone from '@/components/DropZone';
 import UploadGrid from '@/components/UploadGrid';
 import AccessGate, { isAlreadyUnlocked } from '@/components/AccessGate';
 import ConfirmUploadModal from '@/components/ConfirmUploadModal';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import DevelopingSplash from '@/components/DevelopingSplash';
 import { uploadFile } from '@/lib/uploadClient';
 import { fileKind, formatBytes, groupMemories, makeId } from '@/lib/format';
@@ -13,6 +14,20 @@ import type { UploadItem } from '@/lib/types';
 
 type SortField = 'date' | 'size' | 'type';
 type SortOrder = 'desc' | 'asc';
+
+interface ConfirmState {
+  isOpen: boolean;
+  title: string;
+  badge?: string;
+  description: string;
+  itemName?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  isDestructive?: boolean;
+  thumbnailUrl?: string;
+  thumbnailKind?: 'image' | 'video';
+  onConfirm: () => void;
+}
 
 export default function Page() {
   const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
@@ -22,6 +37,7 @@ export default function Page() {
   const [pendingItems, setPendingItems] = useState<UploadItem[]>([]);
   const [isLoadingMedia, setIsLoadingMedia] = useState<boolean>(true);
   const [isConfigured, setIsConfigured] = useState<boolean>(true);
+  const [confirmModal, setConfirmModal] = useState<ConfirmState | null>(null);
 
   // Tab, Sort, and Deck Layout states
   const [activeTab, setActiveTab] = useState<'reel' | 'trash'>('reel');
@@ -253,56 +269,76 @@ export default function Page() {
   }
 
   // Permanent Delete (only executed from Trash or with explicit confirmation)
-  async function handlePermanentDelete(id: string) {
+  function handlePermanentDelete(id: string) {
     const target = items.find((i) => i.id === id);
     if (!target) return;
 
-    const confirmed = window.confirm(
-      `Permanently delete "${target.name || 'this memory'}" from Cloudinary? This action cannot be undone.`
-    );
-    if (!confirmed) return;
+    setConfirmModal({
+      isOpen: true,
+      title: 'Permanently discard memory?',
+      badge: 'destructive action',
+      itemName: target.name || (target.kind === 'image' ? 'Photograph' : 'Motion Film'),
+      description:
+        'This memory will be permanently removed from Cloudinary storage. Once discarded, it cannot be retrieved or developed again.',
+      confirmLabel: 'Discard Forever',
+      cancelLabel: 'Keep in Trash',
+      isDestructive: true,
+      thumbnailUrl: target.previewUrl,
+      thumbnailKind: target.kind,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        if (target.previewUrl && target.previewUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(target.previewUrl);
+        }
 
-    if (target.previewUrl && target.previewUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(target.previewUrl);
-    }
+        // Optimistically remove from state
+        setItems((prev) => prev.filter((i) => i.id !== id));
 
-    // Optimistically remove from state
-    setItems((prev) => prev.filter((i) => i.id !== id));
-
-    if (target.key) {
-      try {
-        await fetch('/api/media', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ publicId: target.key, kind: target.kind }),
-        });
-        loadMediaFromCloudinary();
-      } catch (err) {
-        console.error('Failed to permanently delete asset from Cloudinary:', err);
-      }
-    }
+        if (target.key) {
+          try {
+            await fetch('/api/media', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ publicId: target.key, kind: target.kind }),
+            });
+            loadMediaFromCloudinary();
+          } catch (err) {
+            console.error('Failed to permanently delete asset from Cloudinary:', err);
+          }
+        }
+      },
+    });
   }
 
   // Empty entire Trash
-  async function handleEmptyTrash() {
+  function handleEmptyTrash() {
     const trashedCount = items.filter((i) => i.isTrashed).length;
     if (trashedCount === 0) return;
 
-    const confirmed = window.confirm(
-      `Permanently delete all ${trashedCount} items in the trash from Cloudinary? This cannot be undone.`
-    );
-    if (!confirmed) return;
+    setConfirmModal({
+      isOpen: true,
+      title: 'Empty darkroom trash?',
+      badge: `permanent purge • ${trashedCount} ${trashedCount === 1 ? 'item' : 'items'}`,
+      description: `All ${trashedCount} discarded ${
+        trashedCount === 1 ? 'memory' : 'memories'
+      } will be permanently wiped from Cloudinary storage. This cannot be undone.`,
+      confirmLabel: `Purge All (${trashedCount})`,
+      cancelLabel: 'Cancel',
+      isDestructive: true,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        setItems((prev) => prev.filter((i) => !i.isTrashed));
 
-    setItems((prev) => prev.filter((i) => !i.isTrashed));
-
-    try {
-      await fetch('/api/media/trash', {
-        method: 'DELETE',
-      });
-      loadMediaFromCloudinary();
-    } catch (err) {
-      console.error('Failed to empty trash from Cloudinary:', err);
-    }
+        try {
+          await fetch('/api/media/trash', {
+            method: 'DELETE',
+          });
+          loadMediaFromCloudinary();
+        } catch (err) {
+          console.error('Failed to empty trash from Cloudinary:', err);
+        }
+      },
+    });
   }
 
   function handleRetry(id: string) {
@@ -422,6 +458,23 @@ export default function Page() {
     setUnlocked(false);
   }
 
+  function handleLockRequest() {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Lock the darkroom?',
+      badge: 'security • lock reel',
+      description:
+        'This will end your active session and require entering your passcode to return into the darkroom.',
+      confirmLabel: 'Lock Now',
+      cancelLabel: 'Keep Unlocked',
+      isDestructive: false,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        await handleLock();
+      },
+    });
+  }
+
   if (isCheckingAuth) {
     return (
       <main className="min-h-dvh flex items-center justify-center bg-paper">
@@ -447,7 +500,7 @@ export default function Page() {
       <main className="min-h-dvh px-4 sm:px-6 md:px-8 py-6 sm:py-10 max-w-4xl mx-auto">
         <div className="sprocket-strip mb-6 sm:mb-7" />
 
-      <FilmHeader count={activeItems.length} onLock={handleLock} />
+      <FilmHeader count={activeItems.length} onLock={handleLockRequest} />
 
       <section className="mb-7 sm:mb-8">
         <DropZone onFiles={handleFiles} />
@@ -460,6 +513,24 @@ export default function Page() {
         onCancel={handleCancelUpload}
         onRemoveItem={handleRemovePendingItem}
       />
+
+      {/* Darkroom-styled Confirmation Modal */}
+      {confirmModal && (
+        <ConfirmDialog
+          isOpen={confirmModal.isOpen}
+          title={confirmModal.title}
+          badge={confirmModal.badge}
+          itemName={confirmModal.itemName}
+          description={confirmModal.description}
+          confirmLabel={confirmModal.confirmLabel}
+          cancelLabel={confirmModal.cancelLabel}
+          isDestructive={confirmModal.isDestructive}
+          thumbnailUrl={confirmModal.thumbnailUrl}
+          thumbnailKind={confirmModal.thumbnailKind}
+          onConfirm={confirmModal.onConfirm}
+          onCancel={() => setConfirmModal(null)}
+        />
+      )}
 
       <section>
         {/* View Switcher & Sorting Controls Bar */}

@@ -79,7 +79,7 @@ export default function AccessGate({ onUnlock }: { onUnlock: () => void }) {
         <button
           type="submit"
           disabled={isVerifying}
-          className="mt-5 w-full bg-rust hover:bg-rust-dark active:scale-[0.98] transition text-paper-light rounded-sm py-3 font-medium disabled:opacity-60"
+          className="mt-5 w-full bg-rust hover:bg-rust-dark active:scale-[0.98] transition text-paper-light rounded-sm py-3 font-display italic font-medium text-base disabled:opacity-60 shadow-xs"
         >
           {isVerifying ? 'Checking passcode…' : 'Unlock'}
         </button>
