@@ -534,76 +534,53 @@ export default function Page() {
 
       <section>
         {/* View Switcher & Sorting Controls Bar */}
-        <div className="mb-5 flex flex-col md:flex-row md:items-center justify-between gap-2.5 p-2 sm:p-2.5 bg-paper border border-line rounded-sm">
-          {/* Tabs: Active Reel vs Trash */}
-          <div className="flex items-center gap-1.5 font-stamp text-xs">
-            <button
-              type="button"
-              onClick={() => setActiveTab('reel')}
-              className={`px-2.5 py-1 rounded-xs transition flex items-center gap-1.5 ${
-                activeTab === 'reel'
-                  ? 'bg-ink text-paper-light font-medium shadow-xs'
-                  : 'text-ink/65 hover:text-ink hover:bg-ink/5'
-              }`}
-            >
-              <svg
-                className="w-3.5 h-3.5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
-                <line x1="7" y1="2" x2="7" y2="22" />
-                <line x1="17" y1="2" x2="17" y2="22" />
-                <line x1="2" y1="12" x2="22" y2="12" />
-                <line x1="2" y1="7" x2="7" y2="7" />
-                <line x1="2" y1="17" x2="7" y2="17" />
-                <line x1="17" y1="17" x2="22" y2="17" />
-                <line x1="17" y1="7" x2="22" y2="7" />
-              </svg>
-              <span>Active Reel</span>
-              <span className="opacity-70 text-[10px]">({activeItems.length})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('trash')}
-              className={`px-2.5 py-1 rounded-xs transition flex items-center gap-1.5 ${
-                activeTab === 'trash'
-                  ? 'bg-rust text-paper-light font-medium shadow-xs'
-                  : 'text-ink/65 hover:text-rust hover:bg-rust/5'
-              }`}
-            >
-              <svg
-                className="w-3.5 h-3.5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              </svg>
-              <span>Trash</span>
-              <span className="opacity-70 text-[10px]">({trashedItems.length})</span>
-            </button>
-          </div>
-
-          {/* Right side controls: Tactile Vintage Sorting & Empty Trash */}
-          <div className="flex flex-wrap items-center justify-between md:justify-end gap-2 sm:gap-2.5">
-            {activeTab === 'trash' && trashedItems.length > 0 && (
+        <div className="mb-5 p-1.5 sm:p-2 bg-paper border border-line rounded-sm flex flex-col md:flex-row md:items-center justify-between gap-1.5 sm:gap-2">
+          {/* Row 1 on mobile / Left on desktop: Tabs & Layout Toggle */}
+          <div className="flex items-center justify-between gap-2 w-full md:w-auto">
+            {/* Tabs: Reel vs Trash */}
+            <div className="inline-flex rounded-xs border border-line bg-paper-light p-0.5 font-stamp text-xs">
               <button
                 type="button"
-                onClick={handleEmptyTrash}
-                className="font-stamp text-xs text-rust hover:bg-rust/10 border border-rust/40 px-2.5 py-1.5 rounded-xs transition flex items-center gap-1.5"
+                onClick={() => setActiveTab('reel')}
+                className={`px-2 py-1 rounded-xs transition flex items-center gap-1.5 ${
+                  activeTab === 'reel'
+                    ? 'bg-ink text-paper-light font-medium shadow-xs'
+                    : 'text-ink/65 hover:text-ink hover:bg-ink/5'
+                }`}
               >
                 <svg
-                  className="w-3.5 h-3.5"
+                  className="w-3 h-3"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
+                  <line x1="7" y1="2" x2="7" y2="22" />
+                  <line x1="17" y1="2" x2="17" y2="22" />
+                  <line x1="2" y1="12" x2="22" y2="12" />
+                  <line x1="2" y1="7" x2="7" y2="7" />
+                  <line x1="2" y1="17" x2="7" y2="17" />
+                  <line x1="17" y1="17" x2="22" y2="17" />
+                  <line x1="17" y1="7" x2="22" y2="7" />
+                </svg>
+                <span>Reel</span>
+                <span className="opacity-70 text-[10px]">({activeItems.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('trash')}
+                className={`px-2 py-1 rounded-xs transition flex items-center gap-1.5 ${
+                  activeTab === 'trash'
+                    ? 'bg-rust text-paper-light font-medium shadow-xs'
+                    : 'text-ink/65 hover:text-rust hover:bg-rust/5'
+                }`}
+              >
+                <svg
+                  className="w-3 h-3"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -614,78 +591,104 @@ export default function Page() {
                   <polyline points="3 6 5 6 21 6" />
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                 </svg>
-                <span>Empty Trash</span>
-              </button>
-            )}
-
-            {/* Layout Toggle: Decks vs Spread */}
-            <div className="inline-flex rounded-xs border border-line bg-paper-light p-0.5 font-stamp text-xs">
-              <button
-                type="button"
-                onClick={() => setIsDeckMode(true)}
-                title="Stack into decks of cards"
-                className={`px-2.5 py-1 rounded-xs transition flex items-center gap-1.5 ${
-                  isDeckMode
-                    ? 'bg-ink text-paper-light font-medium shadow-xs'
-                    : 'text-ink/65 hover:text-ink hover:bg-ink/5'
-                }`}
-              >
-                <svg
-                  className="w-3 h-3"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polygon points="12 2 2 7 12 12 22 7 12 2" />
-                  <polyline points="2 17 12 22 22 17" />
-                  <polyline points="2 12 12 17 22 12" />
-                </svg>
-                <span>Decks</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsDeckMode(false)}
-                title="Spread all cards across the grid"
-                className={`px-2.5 py-1 rounded-xs transition flex items-center gap-1.5 ${
-                  !isDeckMode
-                    ? 'bg-ink text-paper-light font-medium shadow-xs'
-                    : 'text-ink/65 hover:text-ink hover:bg-ink/5'
-                }`}
-              >
-                <svg
-                  className="w-3 h-3"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="3" width="7" height="7" />
-                  <rect x="14" y="3" width="7" height="7" />
-                  <rect x="14" y="14" width="7" height="7" />
-                  <rect x="3" y="14" width="7" height="7" />
-                </svg>
-                <span>Spread</span>
+                <span>Trash</span>
+                <span className="opacity-70 text-[10px]">({trashedItems.length})</span>
               </button>
             </div>
 
-            {/* Vintage Tactile Sort Group */}
+            {/* Layout Toggle: Decks vs Spread (and Empty Trash button) */}
             <div className="flex items-center gap-1.5">
-              <span className="font-stamp text-[10px] uppercase text-ink/40 tracking-wider hidden sm:inline">
+              {activeTab === 'trash' && trashedItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleEmptyTrash}
+                  className="font-stamp text-[11px] text-rust hover:bg-rust/10 border border-rust/40 px-2 py-1 rounded-xs transition flex items-center gap-1"
+                >
+                  <svg
+                    className="w-3 h-3"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                  <span>Purge</span>
+                </button>
+              )}
+
+              <div className="inline-flex rounded-xs border border-line bg-paper-light p-0.5 font-stamp text-xs">
+                <button
+                  type="button"
+                  onClick={() => setIsDeckMode(true)}
+                  title="Stack into decks of cards"
+                  className={`px-2 py-1 rounded-xs transition flex items-center gap-1 ${
+                    isDeckMode
+                      ? 'bg-ink text-paper-light font-medium shadow-xs'
+                      : 'text-ink/65 hover:text-ink hover:bg-ink/5'
+                  }`}
+                >
+                  <svg
+                    className="w-3 h-3"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                    <polyline points="2 17 12 22 22 17" />
+                    <polyline points="2 12 12 17 22 12" />
+                  </svg>
+                  <span>Decks</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsDeckMode(false)}
+                  title="Spread all cards across the grid"
+                  className={`px-2 py-1 rounded-xs transition flex items-center gap-1 ${
+                    !isDeckMode
+                      ? 'bg-ink text-paper-light font-medium shadow-xs'
+                      : 'text-ink/65 hover:text-ink hover:bg-ink/5'
+                  }`}
+                >
+                  <svg
+                    className="w-3 h-3"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="3" y="3" width="7" height="7" />
+                    <rect x="14" y="3" width="7" height="7" />
+                    <rect x="14" y="14" width="7" height="7" />
+                    <rect x="3" y="14" width="7" height="7" />
+                  </svg>
+                  <span>Spread</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Row 2 on mobile / Right on desktop: Sorting & Order */}
+          <div className="flex items-center justify-between md:justify-end gap-1.5 sm:gap-2 w-full md:w-auto pt-1.5 md:pt-0 border-t border-line/40 md:border-t-0">
+            {/* Field Segmented Buttons */}
+            <div className="flex items-center gap-1">
+              <span className="font-stamp text-[10px] uppercase text-ink/40 tracking-wider hidden lg:inline mr-0.5">
                 Sort:
               </span>
-
-              {/* Field Segmented Buttons */}
               <div className="inline-flex rounded-xs border border-line bg-paper-light p-0.5 font-stamp text-xs">
                 <button
                   type="button"
                   onClick={() => setSortField('date')}
-                  className={`px-2.5 py-1 rounded-xs transition flex items-center gap-1.5 ${
+                  className={`px-2 py-1 rounded-xs transition flex items-center gap-1 ${
                     sortField === 'date'
                       ? 'bg-ink text-paper-light font-medium shadow-xs'
                       : 'text-ink/65 hover:text-ink hover:bg-ink/5'
@@ -709,7 +712,7 @@ export default function Page() {
                 <button
                   type="button"
                   onClick={() => setSortField('size')}
-                  className={`px-2.5 py-1 rounded-xs transition flex items-center gap-1.5 ${
+                  className={`px-2 py-1 rounded-xs transition flex items-center gap-1 ${
                     sortField === 'size'
                       ? 'bg-ink text-paper-light font-medium shadow-xs'
                       : 'text-ink/65 hover:text-ink hover:bg-ink/5'
@@ -732,7 +735,7 @@ export default function Page() {
                 <button
                   type="button"
                   onClick={() => setSortField('type')}
-                  className={`px-2.5 py-1 rounded-xs transition flex items-center gap-1.5 ${
+                  className={`px-2 py-1 rounded-xs transition flex items-center gap-1 ${
                     sortField === 'type'
                       ? 'bg-ink text-paper-light font-medium shadow-xs'
                       : 'text-ink/65 hover:text-ink hover:bg-ink/5'
@@ -754,49 +757,49 @@ export default function Page() {
                   <span>Type</span>
                 </button>
               </div>
-
-              {/* Order direction toggle */}
-              <button
-                type="button"
-                onClick={() =>
-                  setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))
-                }
-                title={
-                  sortOrder === 'desc'
-                    ? 'Switch to Ascending'
-                    : 'Switch to Descending'
-                }
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xs border border-line bg-paper-light hover:border-ink/50 text-ink font-stamp text-xs transition active:scale-[0.98]"
-              >
-                <svg
-                  className={`w-3 h-3 transition-transform duration-200 ${
-                    sortOrder === 'asc' ? 'rotate-180' : ''
-                  }`}
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <polyline points="19 12 12 19 5 12" />
-                </svg>
-                <span className="text-[11px] text-ink/80 font-medium">
-                  {sortField === 'date'
-                    ? sortOrder === 'desc'
-                      ? 'Newest'
-                      : 'Oldest'
-                    : sortField === 'size'
-                    ? sortOrder === 'desc'
-                      ? 'Largest'
-                      : 'Smallest'
-                    : sortOrder === 'desc'
-                    ? 'Photos'
-                    : 'Videos'}
-                </span>
-              </button>
             </div>
+
+            {/* Order direction toggle */}
+            <button
+              type="button"
+              onClick={() =>
+                setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))
+              }
+              title={
+                sortOrder === 'desc'
+                  ? 'Switch to Ascending'
+                  : 'Switch to Descending'
+              }
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-xs border border-line bg-paper-light hover:border-ink/50 text-ink font-stamp text-xs transition active:scale-[0.98] shrink-0"
+            >
+              <svg
+                className={`w-3 h-3 transition-transform duration-200 ${
+                  sortOrder === 'asc' ? 'rotate-180' : ''
+                }`}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <polyline points="19 12 12 19 5 12" />
+              </svg>
+              <span className="text-[11px] text-ink/80 font-medium">
+                {sortField === 'date'
+                  ? sortOrder === 'desc'
+                    ? 'Newest'
+                    : 'Oldest'
+                  : sortField === 'size'
+                  ? sortOrder === 'desc'
+                    ? 'Largest'
+                    : 'Smallest'
+                  : sortOrder === 'desc'
+                  ? 'Photos'
+                  : 'Videos'}
+              </span>
+            </button>
           </div>
         </div>
 
