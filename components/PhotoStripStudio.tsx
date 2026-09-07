@@ -250,6 +250,7 @@ export default function PhotoStripStudio({
   // Sequential config steps: 'style' -> 'photos' -> 'note' (Live preview builds in real time!)
   const [studioStep, setStudioStep] = useState<StudioStep>('style');
   const [isMobilePreviewExpanded, setIsMobilePreviewExpanded] = useState(false);
+  const [isMobilePreviewVisible, setIsMobilePreviewVisible] = useState(false);
 
   // Refs for smooth navigation & auto-fit preview scaling
   const themeSectionRef = useRef<HTMLDivElement>(null);
@@ -291,6 +292,14 @@ export default function PhotoStripStudio({
   const [selectingPhotoId, setSelectingPhotoId] = useState<string | null>(null);
   const [drawerInitialSlotIds, setDrawerInitialSlotIds] = useState<(string | null)[]>([]);
 
+  // Drag & drop relocation state
+  const [draggedSlotIndex, setDraggedSlotIndex] = useState<number | null>(null);
+  const [dragOverSlotIndex, setDragOverSlotIndex] = useState<number | null>(null);
+  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
+  const [touchDraggingSlotIndex, setTouchDraggingSlotIndex] = useState<number | null>(null);
+  const [touchCurrentPos, setTouchCurrentPos] = useState<{ x: number; y: number } | null>(null);
+  const [slotToSwapIndex, setSlotToSwapIndex] = useState<number | null>(null);
+
   // Custom text configuration
   const [headerText, setHeaderText] = useState('MEMOIR PHOTOBOOTH');
   const [showHeader, setShowHeader] = useState(false);
@@ -315,6 +324,7 @@ export default function PhotoStripStudio({
     if (isOpen) {
       setStudioStep('style');
       setIsMobilePreviewExpanded(false);
+      setIsMobilePreviewVisible(false);
       setCustomDate(getTodayFormattedDate());
       setSlotPhotoIds((prev) => {
         const targetSize = activeLayout.slots;
@@ -547,6 +557,139 @@ export default function PhotoStripStudio({
     setSlotPhotoIds(new Array(activeLayout.slots).fill(null));
   };
 
+  // Relocate or swap photos between two slot indices
+  const handleSwapSlots = (fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return;
+    setSlotPhotoIds((prev) => {
+      const next = [...prev];
+      const sourcePhoto = next[fromIdx];
+      const targetPhoto = next[toIdx];
+      next[fromIdx] = targetPhoto;
+      next[toIdx] = sourcePhoto;
+      return next;
+    });
+    setSlotToSwapIndex(null);
+  };
+
+  // Slot click handler: Supports Tap-to-Swap for mobile & desktop, or opens photo picker
+  const handleSlotClick = (slotIdx: number) => {
+    if (touchDraggingSlotIndex !== null || draggedSlotIndex !== null) return;
+    const hasPhoto = Boolean(slotPhotoIds[slotIdx]);
+
+    if (slotToSwapIndex !== null) {
+      if (slotToSwapIndex === slotIdx) {
+        setSlotToSwapIndex(null);
+      } else {
+        handleSwapSlots(slotToSwapIndex, slotIdx);
+      }
+      return;
+    }
+
+    if (hasPhoto) {
+      setSlotToSwapIndex(slotIdx);
+    } else {
+      handleOpenPhotoPicker(slotIdx);
+    }
+  };
+
+  // HTML5 Drag and drop handlers for desktop
+  const handleDragStart = (slotIdx: number, e: React.DragEvent) => {
+    if (!slotPhotoIds[slotIdx]) return;
+    setDraggedSlotIndex(slotIdx);
+    e.dataTransfer.setData('text/plain', String(slotIdx));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (slotIdx: number, e: React.DragEvent) => {
+    if (draggedSlotIndex !== null && draggedSlotIndex !== slotIdx) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragOverSlotIndex !== slotIdx) {
+        setDragOverSlotIndex(slotIdx);
+      }
+    }
+  };
+
+  const handleDragLeave = (slotIdx: number) => {
+    if (dragOverSlotIndex === slotIdx) {
+      setDragOverSlotIndex(null);
+    }
+  };
+
+  const handleDrop = (slotIdx: number, e: React.DragEvent) => {
+    e.preventDefault();
+    const sourceIdx =
+      draggedSlotIndex !== null ? draggedSlotIndex : Number(e.dataTransfer.getData('text/plain'));
+    if (!isNaN(sourceIdx) && sourceIdx !== slotIdx) {
+      handleSwapSlots(sourceIdx, slotIdx);
+    }
+    setDraggedSlotIndex(null);
+    setDragOverSlotIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedSlotIndex(null);
+    setDragOverSlotIndex(null);
+  };
+
+  // Touch drag-and-drop support for mobile / touch devices
+  const handleTouchStart = (slotIdx: number, e: React.TouchEvent) => {
+    if (!slotPhotoIds[slotIdx]) return;
+    const touch = e.touches[0];
+    touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchMove = (slotIdx: number, e: React.TouchEvent) => {
+    if (!touchStartPos.current || !slotPhotoIds[slotIdx]) return;
+    const touch = e.touches[0];
+    const dx = Math.abs(touch.clientX - touchStartPos.current.x);
+    const dy = Math.abs(touch.clientY - touchStartPos.current.y);
+
+    if (dx > 6 || dy > 6) {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+      if (touchDraggingSlotIndex === null) {
+        setTouchDraggingSlotIndex(slotIdx);
+        setSlotToSwapIndex(null);
+      }
+      setTouchCurrentPos({ x: touch.clientX, y: touch.clientY });
+
+      // Hit-test element at touch position (offset slightly upward toward finger focal point)
+      const targetEl =
+        document.elementFromPoint(touch.clientX, touch.clientY - 12) ||
+        document.elementFromPoint(touch.clientX, touch.clientY);
+      const slotEl = targetEl?.closest('[data-slot-index]');
+      if (slotEl) {
+        const targetIdx = Number(slotEl.getAttribute('data-slot-index'));
+        if (!isNaN(targetIdx) && targetIdx !== slotIdx) {
+          setDragOverSlotIndex(targetIdx);
+        } else {
+          setDragOverSlotIndex(null);
+        }
+      } else {
+        setDragOverSlotIndex(null);
+      }
+    }
+  };
+
+  const handleTouchEnd = (slotIdx: number) => {
+    if (touchDraggingSlotIndex !== null && dragOverSlotIndex !== null && dragOverSlotIndex !== slotIdx) {
+      handleSwapSlots(slotIdx, dragOverSlotIndex);
+    }
+    touchStartPos.current = null;
+    setTouchDraggingSlotIndex(null);
+    setDragOverSlotIndex(null);
+    setTouchCurrentPos(null);
+  };
+
+  const handleTouchCancel = () => {
+    touchStartPos.current = null;
+    setTouchDraggingSlotIndex(null);
+    setDragOverSlotIndex(null);
+    setTouchCurrentPos(null);
+  };
+
   // Get CSS filter rule string based on filterId
   const getFilterStyle = useCallback((filter: StripFilterId): string => {
     switch (filter) {
@@ -604,10 +747,13 @@ export default function PhotoStripStudio({
     }
   };
 
-  // High-Resolution Canvas Export Engine
-  const generateStripCanvas = async (): Promise<HTMLCanvasElement> => {
-    // 2.5x multiplier for crisp print resolution
-    const scale = 2.5;
+  // High-Resolution Canvas Export Engine with adaptive scaling
+  const generateStripCanvas = async (customScale?: number): Promise<HTMLCanvasElement> => {
+    // Adaptive scale: for wide-8 (1320px base width) or 8-photo layouts, 2.0x provides
+    // crisp 2640px Retina resolution while keeping memory and file size safely within server limits.
+    // For smaller 1-4 cut strips, 2.5x gives ultra-crisp print quality.
+    const defaultScale = activeLayout.slots >= 8 || activeLayout.baseWidth >= 1000 ? 2.0 : 2.5;
+    const scale = customScale || defaultScale;
     const canvas = document.createElement('canvas');
     const width = Math.round(activeLayout.baseWidth * scale);
     const height = Math.round(activeLayout.baseHeight * scale);
@@ -862,35 +1008,51 @@ export default function PhotoStripStudio({
     return canvas;
   };
 
-  // Download Handler: creates PNG and triggers instant save
+  // Helper to safely export canvas to a blob under Vercel's 4.5MB payload limit
+  const getExportBlob = async (
+    canvas: HTMLCanvasElement
+  ): Promise<{ blob: Blob; filename: string }> => {
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    // 1. Try PNG first
+    let blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'));
+    let filename = `memoir-strip-${themeId}-${dateStr}.png`;
+
+    // 2. If PNG exceeds 3.5MB (approaching Vercel serverless 4.5MB limit),
+    // convert to high-quality JPEG (92%) which preserves beautiful clarity with ~1MB file size
+    if (blob && blob.size > 3.5 * 1024 * 1024) {
+      console.warn(`PNG size (${Math.round(blob.size / 1024)}KB) exceeds upload threshold. Optimizing with high-quality JPEG...`);
+      const jpegBlob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.92));
+      if (jpegBlob) {
+        blob = jpegBlob;
+        filename = `memoir-strip-${themeId}-${dateStr}.jpg`;
+      }
+    }
+
+    if (!blob) throw new Error('Failed to generate photo strip image');
+    return { blob, filename };
+  };
+
+  // Download photo strip image to device
   const handleDownload = async () => {
     try {
       setIsExporting(true);
-      setExportMessage('Developing your high-res photo strip...');
+      setExportMessage('Generating photo strip...');
 
       const canvas = await generateStripCanvas();
+      const { blob, filename } = await getExportBlob(canvas);
 
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) {
-            throw new Error('Failed to generate image blob');
-          }
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          const dateStr = new Date().toISOString().slice(0, 10);
-          link.download = `memoir-strip-${themeId}-${dateStr}.png`;
-          link.href = url;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
 
-          setIsExporting(false);
-          setExportMessage('');
-        },
-        'image/png',
-        1.0
-      );
+      setIsExporting(false);
+      setExportMessage('');
     } catch (err) {
       console.error('Export failed:', err);
       setIsExporting(false);
@@ -903,19 +1065,13 @@ export default function PhotoStripStudio({
   const handleSendToDiscord = async () => {
     try {
       setIsSendingDiscord(true);
-      setExportMessage('Sending photo strip to Discord...');
+      setExportMessage('Preparing photo strip for Discord...');
       setDiscordSuccess(false);
 
       const canvas = await generateStripCanvas();
+      const { blob, filename } = await getExportBlob(canvas);
 
-      const blob = await new Promise<Blob | null>((resolve) => {
-        canvas.toBlob(resolve, 'image/png', 1.0);
-      });
-
-      if (!blob) throw new Error('Failed to generate image data');
-
-      const dateStr = new Date().toISOString().slice(0, 10);
-      const filename = `memoir-strip-${themeId}-${dateStr}.png`;
+      setExportMessage('Sending to Discord...');
 
       const formData = new FormData();
       formData.append('file', blob, filename);
@@ -928,9 +1084,24 @@ export default function PhotoStripStudio({
         body: formData,
       });
 
-      const data = await res.json();
+      if (!res.ok) {
+        const text = await res.text();
+        let errorMsg = `Server error (${res.status})`;
+        try {
+          const json = JSON.parse(text);
+          errorMsg = json.error || errorMsg;
+        } catch {
+          if (res.status === 413) {
+            errorMsg = 'Image file too large for server upload. Please try again.';
+          } else if (text && text.length < 150) {
+            errorMsg = text;
+          }
+        }
+        throw new Error(errorMsg);
+      }
 
-      if (!res.ok || !data.ok) {
+      const data = await res.json();
+      if (!data.ok) {
         throw new Error(data.error || 'Failed to post to Discord');
       }
 
@@ -1047,50 +1218,142 @@ export default function PhotoStripStudio({
         {Array.from({ length: activeLayout.slots }).map((_, slotIdx) => {
           const item = slotItems[slotIdx];
           const photoSrc = item?.previewUrl || item?.url;
+          const isBeingDragged =
+            draggedSlotIndex === slotIdx || touchDraggingSlotIndex === slotIdx;
+          const isDropTarget = dragOverSlotIndex === slotIdx;
+          const isSwapSelected = slotToSwapIndex === slotIdx;
+          const isSwapCandidate = slotToSwapIndex !== null && slotToSwapIndex !== slotIdx;
 
           return (
             <div
               key={`slot-${slotIdx}`}
+              data-slot-index={slotIdx}
+              draggable={isInteractive && Boolean(photoSrc)}
+              onDragStart={(e) => handleDragStart(slotIdx, e)}
+              onDragOver={(e) => handleDragOver(slotIdx, e)}
+              onDragLeave={() => handleDragLeave(slotIdx)}
+              onDrop={(e) => handleDrop(slotIdx, e)}
+              onDragEnd={handleDragEnd}
+              onTouchStart={(e) => handleTouchStart(slotIdx, e)}
+              onTouchMove={(e) => handleTouchMove(slotIdx, e)}
+              onTouchEnd={() => handleTouchEnd(slotIdx)}
+              onTouchCancel={handleTouchCancel}
               onClick={() => {
-                if (isInteractive) handleOpenPhotoPicker(slotIdx);
+                if (isInteractive && !touchDraggingSlotIndex && draggedSlotIndex === null) {
+                  handleSlotClick(slotIdx);
+                }
               }}
               style={{
                 backgroundColor: activeTheme.cardHex,
                 borderColor: activeTheme.borderHex,
                 animationDelay: `${slotIdx * 65}ms`,
               }}
-              className={`group relative aspect-[4/3] rounded-[2px] border p-1 sm:p-1.5 ${
+              className={`group relative aspect-[4/3] rounded-[2px] border p-1 sm:p-1.5 touch-none select-none ${
                 photoSrc ? 'animate-photo-develop' : 'animate-slot-cascade'
               } ${
-                isInteractive ? 'cursor-pointer hover:ring-2 hover:ring-rust/70 hover:scale-[1.01]' : ''
-              } transition-all duration-300 flex flex-col items-center justify-center overflow-hidden ${
+                isInteractive
+                  ? photoSrc
+                    ? 'cursor-grab active:cursor-grabbing hover:ring-2 hover:ring-rust/70 hover:scale-[1.01]'
+                    : 'cursor-pointer hover:ring-2 hover:ring-rust/70 hover:scale-[1.01]'
+                  : ''
+              } ${
+                isBeingDragged
+                  ? 'opacity-30 scale-95 ring-2 ring-rust/60 border-dashed'
+                  : isDropTarget
+                  ? 'ring-2 ring-rust border-rust bg-rust/20 scale-[1.03] shadow-md z-10'
+                  : isSwapSelected
+                  ? 'ring-2 ring-rust border-rust bg-rust/15 shadow-md scale-[1.02] z-20 animate-pulse'
+                  : isSwapCandidate
+                  ? 'hover:ring-2 hover:ring-rust/50 cursor-pointer'
+                  : ''
+              } transition-all duration-200 flex flex-col items-center justify-center overflow-hidden ${
                 !photoSrc ? 'border-dashed opacity-85 hover:opacity-100' : 'border-solid shadow-xs'
               }`}
-              title={photoSrc ? 'Tap to swap photo' : 'Tap to choose photo'}
+              title={
+                photoSrc
+                  ? slotToSwapIndex !== null
+                    ? slotToSwapIndex === slotIdx
+                      ? 'Tap to cancel swap selection'
+                      : 'Tap to swap with selected photo'
+                    : 'Drag or tap to swap photo'
+                  : slotToSwapIndex !== null
+                  ? 'Tap to move selected photo here'
+                  : 'Tap to choose photo'
+              }
             >
+              {isDropTarget && (
+                <div className="absolute inset-0 bg-rust/25 border-2 border-rust border-dashed rounded-[2px] flex items-center justify-center z-20 pointer-events-none animate-pulse">
+                  <span className="bg-rust text-paper-light font-stamp text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-xs shadow-xs">
+                    Relocate here
+                  </span>
+                </div>
+              )}
+
+              {isSwapSelected && (
+                <div className="absolute inset-0 bg-rust/25 border-2 border-rust rounded-[2px] flex flex-col items-center justify-center gap-1 z-30 p-1 pointer-events-auto">
+                  <span className="bg-rust text-paper-light font-stamp text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded-xs shadow-xs text-center leading-tight">
+                    Tap other slot to swap
+                  </span>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSlotToSwapIndex(null);
+                        handleOpenPhotoPicker(slotIdx);
+                      }}
+                      className="bg-paper text-ink font-display text-[9px] px-1.5 py-0.5 rounded-2xs border border-line shadow-xs hover:bg-paper-light transition"
+                    >
+                      Change
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSlotToSwapIndex(null);
+                      }}
+                      className="bg-ink/85 text-paper-light font-display text-[9px] px-1.5 py-0.5 rounded-2xs shadow-xs hover:bg-ink transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {photoSrc ? (
                 <>
                   <img
                     src={photoSrc}
                     alt={`Slot ${slotIdx + 1}`}
                     style={{ filter: getFilterStyle(filterId) }}
-                    className="w-full h-full object-cover rounded-[1px] transition-all duration-300"
+                    className="w-full h-full object-cover rounded-[1px] transition-all duration-300 pointer-events-none select-none"
                   />
 
                   {activeTheme.id === 'film' && (
-                    <span className="absolute bottom-1 right-1.5 font-stamp text-[9px] text-[#E5B560] drop-shadow-xs">
+                    <span className="absolute bottom-1 right-1.5 font-stamp text-[9px] text-[#E5B560] drop-shadow-xs pointer-events-none">
                       0{slotIdx + 1}A
                     </span>
                   )}
 
-                  {isInteractive && (
-                    <div className="absolute inset-0 bg-ink/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
-                      <span className="font-stamp text-[10px] text-paper-light bg-ink/75 px-1.5 py-0.5 rounded-xs">
-                        Swap
+                  {isInteractive && !isSwapSelected && (
+                    <div className="absolute inset-0 bg-ink/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-1.5">
+                      <span className="font-stamp text-[9px] text-paper-light bg-ink/80 px-1.5 py-0.5 rounded-xs flex items-center gap-1 pointer-events-none">
+                        <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <polyline points="5 9 2 12 5 15"/>
+                          <polyline points="9 5 12 2 15 5"/>
+                          <polyline points="15 19 12 22 9 19"/>
+                          <polyline points="19 9 22 12 19 15"/>
+                          <line x1="2" y1="12" x2="22" y2="12"/>
+                          <line x1="12" y1="2" x2="12" y2="22"/>
+                        </svg>
+                        <span>Move</span>
                       </span>
                       <button
                         type="button"
-                        onClick={(e) => handleRemovePhotoFromSlot(slotIdx, e)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemovePhotoFromSlot(slotIdx, e);
+                        }}
                         title="Remove photo"
                         className="w-5 h-5 flex items-center justify-center bg-rust text-paper-light rounded-full hover:bg-rust-dark transition"
                       >
@@ -1102,7 +1365,7 @@ export default function PhotoStripStudio({
                   )}
                 </>
               ) : (
-                <div className="flex flex-col items-center justify-center p-2 text-center animate-pulse-gentle">
+                <div className="flex flex-col items-center justify-center p-2 text-center animate-pulse-gentle pointer-events-none">
                   <span className="w-6 h-6 rounded-full border border-dashed border-current/40 flex items-center justify-center text-xs mb-1 opacity-70 group-hover:scale-110 transition">
                     +
                   </span>
@@ -1172,7 +1435,8 @@ export default function PhotoStripStudio({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/75 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto no-scrollbar">
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/75 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto no-scrollbar">
       {/* Outer Studio Dialog Container - Dynamically wide for landscape sheets */}
       <div className={`relative w-full ${
         activeLayout.id === 'wide-8'
@@ -1280,35 +1544,52 @@ export default function PhotoStripStudio({
 
         {/* Main Body: Split into Left (Controls) and Right (Preview Stage) */}
         <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
-          {/* On Mobile (< md): Collapsible Compact Preview at Top */}
-          <div className="md:hidden w-full bg-paper/60 border-b border-line/70 flex flex-col items-center p-2.5 shrink-0 relative overflow-hidden">
-            <div className="w-full flex items-center justify-between mb-1.5 px-1">
-              <span className="font-stamp text-[11px] text-ink/70">Preview</span>
-              <button
-                type="button"
-                onClick={() => setIsMobilePreviewExpanded(!isMobilePreviewExpanded)}
-                className="font-display text-[11px] text-rust hover:underline flex items-center gap-1 font-medium"
-              >
-                <span>{isMobilePreviewExpanded ? 'Collapse' : 'Expand'}</span>
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d={isMobilePreviewExpanded ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
-                </svg>
-              </button>
-            </div>
-
-            <div className={`w-full flex justify-center transition-all duration-300 ${
-              isMobilePreviewExpanded ? 'max-h-[60vh] overflow-y-auto no-scrollbar py-2' : 'max-h-[190px] overflow-y-auto no-scrollbar py-1'
-            }`}>
-              <div className={`w-full ${
-                activeLayout.id === 'wide-8' ? 'max-w-[460px] px-1' : 'max-w-[270px]'
-              } flex flex-col items-center transition-all duration-300 ${
-                !isMobilePreviewExpanded
-                  ? (activeLayout.id === 'wide-8' ? 'transform scale-[0.78] origin-top my-[-6px]' : 'transform scale-[0.65] origin-top my-[-8px]')
-                  : ''
-              }`}>
-                {renderPhotoStripCard(true)}
+          {/* On Mobile (< md): Compact Collapsible Preview Bar */}
+          <div className="md:hidden w-full bg-paper border-b border-line flex flex-col items-center shrink-0">
+            <div className="w-full flex items-center justify-between px-3 py-1.5 bg-paper-light border-b border-line/40">
+              <div className="flex items-center gap-1.5">
+                <span className="font-stamp text-[11px] text-ink/80 font-medium">Strip Preview</span>
+                <span className="font-display italic text-[10px] text-ink/55">
+                  ({activeLayout.name})
+                </span>
+                {slotToSwapIndex !== null && (
+                  <span className="font-stamp text-[9px] text-rust bg-rust/10 border border-rust/20 px-1 py-0.5 rounded-2xs animate-pulse">
+                    Tap slot to swap
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsMobilePreviewExpanded(true)}
+                  className="px-2 py-1 bg-rust hover:bg-rust-dark text-paper-light font-display text-[11px] rounded-xs shadow-2xs flex items-center gap-1 transition whitespace-nowrap font-medium"
+                  title="Open full interactive preview to arrange photos"
+                >
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                  </svg>
+                  <span>Arrange</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsMobilePreviewVisible(!isMobilePreviewVisible)}
+                  className="px-2 py-1 border border-line bg-paper text-ink/70 font-display text-[11px] rounded-xs shadow-2xs hover:text-ink transition whitespace-nowrap"
+                  title={isMobilePreviewVisible ? 'Hide preview strip' : 'Show preview strip'}
+                >
+                  {isMobilePreviewVisible ? 'Hide' : 'Show'}
+                </button>
               </div>
             </div>
+
+            {isMobilePreviewVisible && (
+              <div className="w-full max-h-[145px] overflow-y-auto no-scrollbar py-2 px-3 flex justify-center bg-paper/60 border-b border-line/40">
+                <div className={`w-full ${
+                  activeLayout.id === 'wide-8' ? 'max-w-[420px]' : 'max-w-[260px]'
+                } flex flex-col items-center transform scale-[0.62] sm:scale-75 origin-top my-[-10px]`}>
+                  {renderPhotoStripCard(true)}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Left Panel: Configuration Steps */}
@@ -1535,18 +1816,18 @@ export default function PhotoStripStudio({
                   <h3 className="font-display italic text-base text-ink leading-tight">
                     Photos
                   </h3>
-                  <div className="flex items-center gap-1.5 font-display text-xs">
+                  <div className="flex items-center gap-1 sm:gap-1.5 font-display text-xs flex-nowrap overflow-x-auto no-scrollbar py-0.5">
                     <button
                       type="button"
                       onClick={() => {
                         const firstEmpty = slotPhotoIds.findIndex((id) => id === null);
                         handleOpenPhotoPicker(firstEmpty !== -1 ? firstEmpty : 0);
                       }}
-                      className="px-2.5 py-1 rounded-xs border border-rust/40 bg-rust/10 hover:bg-rust hover:text-paper-light text-rust transition text-xs flex items-center gap-1 shadow-2xs font-medium"
+                      className="px-2 py-1 rounded-xs border border-rust/40 bg-rust/10 hover:bg-rust hover:text-paper-light text-rust transition text-[11px] sm:text-xs flex items-center gap-1 shadow-2xs font-medium shrink-0 whitespace-nowrap"
                       title="Open photo library"
                     >
                       <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
                         <circle cx="8.5" cy="8.5" r="1.5" />
                         <polyline points="21 15 16 10 5 21" />
                       </svg>
@@ -1555,7 +1836,7 @@ export default function PhotoStripStudio({
                     <button
                       type="button"
                       onClick={handleAutoFill}
-                      className="px-2.5 py-1 rounded-xs border border-line bg-paper hover:bg-ink hover:text-paper-light text-ink/75 transition text-xs flex items-center gap-1 shadow-2xs"
+                      className="px-2 py-1 rounded-xs border border-line bg-paper hover:bg-ink hover:text-paper-light text-ink/75 transition text-[11px] sm:text-xs flex items-center gap-1 shadow-2xs shrink-0 whitespace-nowrap"
                       title="Fill with our latest memories"
                     >
                       <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1566,7 +1847,7 @@ export default function PhotoStripStudio({
                     <button
                       type="button"
                       onClick={handleShuffle}
-                      className="px-2.5 py-1 rounded-xs border border-line bg-paper hover:bg-ink hover:text-paper-light text-ink/75 transition text-xs flex items-center gap-1 shadow-2xs"
+                      className="px-2 py-1 rounded-xs border border-line bg-paper hover:bg-ink hover:text-paper-light text-ink/75 transition text-[11px] sm:text-xs flex items-center gap-1 shadow-2xs shrink-0 whitespace-nowrap"
                       title="Shuffle photos"
                     >
                       <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1581,7 +1862,7 @@ export default function PhotoStripStudio({
                     <button
                       type="button"
                       onClick={handleClearAll}
-                      className="px-2.5 py-1 rounded-xs border border-line bg-paper hover:text-rust hover:bg-rust/5 text-ink/60 transition text-xs"
+                      className="px-2 py-1 rounded-xs border border-line bg-paper hover:text-rust hover:bg-rust/5 text-ink/60 transition text-[11px] sm:text-xs shrink-0 whitespace-nowrap"
                       title="Clear all photo slots"
                     >
                       Clear
@@ -1593,7 +1874,7 @@ export default function PhotoStripStudio({
                 <div className="bg-paper/70 border border-line/60 rounded-xs p-2 shadow-2xs">
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="font-display text-ink/70">
-                      Selected Photos
+                      Selected Photos {slotToSwapIndex !== null && '• Tap target slot to swap'}
                     </span>
                     <span className="font-stamp text-[11px] text-rust font-medium">
                       {filledSlotsCount} / {activeLayout.slots}
@@ -1617,47 +1898,135 @@ export default function PhotoStripStudio({
                     const item = slotItems[idx];
                     const imgSrc = item?.previewUrl || item?.url;
                     const isPickingThis = activeSlotPickerIndex === idx;
+                    const isBeingDragged =
+                      draggedSlotIndex === idx || touchDraggingSlotIndex === idx;
+                    const isDropTarget = dragOverSlotIndex === idx;
+                    const isSwapSelected = slotToSwapIndex === idx;
+                    const isSwapCandidate = slotToSwapIndex !== null && slotToSwapIndex !== idx;
 
                     return (
-                      <button
+                      <div
                         key={`config-slot-${idx}`}
-                        type="button"
-                        onClick={() => handleOpenPhotoPicker(idx)}
+                        data-slot-index={idx}
+                        draggable={Boolean(imgSrc)}
+                        onDragStart={(e) => handleDragStart(idx, e)}
+                        onDragOver={(e) => handleDragOver(idx, e)}
+                        onDragLeave={() => handleDragLeave(idx)}
+                        onDrop={(e) => handleDrop(idx, e)}
+                        onDragEnd={handleDragEnd}
+                        onTouchStart={(e) => handleTouchStart(idx, e)}
+                        onTouchMove={(e) => handleTouchMove(idx, e)}
+                        onTouchEnd={() => handleTouchEnd(idx)}
+                        onTouchCancel={handleTouchCancel}
+                        onClick={() => {
+                          if (!touchDraggingSlotIndex && draggedSlotIndex === null) {
+                            handleSlotClick(idx);
+                          }
+                        }}
                         style={{ animationDelay: `${idx * 75}ms` }}
-                        className={`group relative aspect-[4/3] rounded-xs border flex flex-col items-center justify-center p-1 transition-all duration-300 overflow-hidden ${
-                          isPickingThis
+                        className={`group relative aspect-[4/3] rounded-xs border flex flex-col items-center justify-center p-1 transition-all duration-200 overflow-hidden touch-none select-none ${
+                          isBeingDragged
+                            ? 'opacity-30 scale-95 ring-2 ring-rust/60 border-dashed'
+                            : isDropTarget
+                            ? 'ring-2 ring-rust border-rust bg-rust/20 scale-[1.02] shadow-md z-10'
+                            : isSwapSelected
+                            ? 'ring-2 ring-rust border-rust bg-rust/15 shadow-md scale-[1.02] z-20 animate-pulse'
+                            : isSwapCandidate
+                            ? 'hover:ring-2 hover:ring-rust/50 cursor-pointer'
+                            : isPickingThis
                             ? 'ring-2 ring-rust border-rust bg-rust/10'
                             : imgSrc
-                            ? 'border-line bg-paper-light hover:border-ink shadow-2xs'
-                            : 'border-dashed border-line bg-paper/50 hover:bg-paper'
+                            ? 'border-line bg-paper-light hover:border-ink shadow-2xs cursor-grab active:cursor-grabbing'
+                            : 'border-dashed border-line bg-paper/50 hover:bg-paper cursor-pointer'
                         }`}
+                        title={
+                          imgSrc
+                            ? slotToSwapIndex !== null
+                              ? slotToSwapIndex === idx
+                                ? 'Tap to cancel swap selection'
+                                : 'Tap to swap with selected photo'
+                              : 'Drag to relocate, or tap to swap'
+                            : slotToSwapIndex !== null
+                            ? 'Tap to move photo here'
+                            : 'Tap to add photo'
+                        }
                       >
+                        {isDropTarget && (
+                          <div className="absolute inset-0 bg-rust/25 border-2 border-rust border-dashed rounded-xs flex items-center justify-center z-20 pointer-events-none animate-pulse">
+                            <span className="bg-rust text-paper-light font-stamp text-[9px] px-1.5 py-0.5 rounded-2xs shadow-xs">
+                              Relocate here
+                            </span>
+                          </div>
+                        )}
+
+                        {isSwapSelected && (
+                          <div className="absolute inset-0 bg-rust/25 border-2 border-rust rounded-xs flex flex-col items-center justify-center gap-1 z-30 p-1 pointer-events-auto">
+                            <span className="bg-rust text-paper-light font-stamp text-[8px] px-1 py-0.5 rounded-2xs shadow-xs text-center leading-tight">
+                              Tap other slot to swap
+                            </span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSlotToSwapIndex(null);
+                                  handleOpenPhotoPicker(idx);
+                                }}
+                                className="bg-paper text-ink font-display text-[9px] px-1.5 py-0.5 rounded-2xs border border-line shadow-xs hover:bg-paper-light transition"
+                              >
+                                Change
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSlotToSwapIndex(null);
+                                }}
+                                className="bg-ink/85 text-paper-light font-display text-[9px] px-1.5 py-0.5 rounded-2xs shadow-xs hover:bg-ink transition"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
                         {imgSrc ? (
-                           <>
+                          <>
                             <img
                               src={imgSrc}
                               alt={`Photo ${idx + 1}`}
                               style={{ filter: getFilterStyle(filterId) }}
-                              className="w-full h-full object-cover rounded-2xs animate-photo-develop transition-all duration-300"
+                              className="w-full h-full object-cover rounded-2xs animate-photo-develop transition-all duration-300 pointer-events-none select-none"
                             />
-                            <span className="absolute bottom-1 right-1 bg-ink/75 text-paper-light font-display text-[9px] px-1 rounded-2xs">
+                            <span className="absolute bottom-1 right-1 bg-ink/75 text-paper-light font-display text-[9px] px-1 rounded-2xs pointer-events-none">
                               Photo {idx + 1}
                             </span>
                             <div className="absolute inset-0 bg-ink/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-1.5">
-                              <span className="font-display text-[10px] text-paper-light bg-ink/80 px-1.5 py-0.5 rounded-2xs">
-                                Change
+                              <span className="font-display text-[10px] text-paper-light bg-ink/80 px-1.5 py-0.5 rounded-2xs flex items-center gap-1">
+                                <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <polyline points="5 9 2 12 5 15"/>
+                                  <polyline points="9 5 12 2 15 5"/>
+                                  <polyline points="15 19 12 22 9 19"/>
+                                  <polyline points="19 9 22 12 19 15"/>
+                                  <line x1="2" y1="12" x2="22" y2="12"/>
+                                  <line x1="12" y1="2" x2="12" y2="22"/>
+                                </svg>
+                                <span>Move</span>
                               </span>
-                              <span
+                              <button
+                                type="button"
                                 onClick={(e) => handleRemovePhotoFromSlot(idx, e)}
-                                className="w-4 h-4 flex items-center justify-center bg-rust text-paper-light rounded-full text-[10px] hover:bg-rust-dark"
+                                className="w-4 h-4 flex items-center justify-center bg-rust text-paper-light rounded-full hover:bg-rust-dark transition shrink-0"
                                 title="Remove photo"
                               >
-                                ✕
-                              </span>
+                                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
                             </div>
                           </>
                         ) : (
-                          <div className="text-center p-2 animate-pulse-gentle">
+                          <div className="text-center p-2 animate-pulse-gentle pointer-events-none">
                             <span className="w-6 h-6 rounded-full border border-dashed border-ink/40 flex items-center justify-center text-xs mx-auto mb-1 text-ink/60 group-hover:scale-110 transition">
                               +
                             </span>
@@ -1666,7 +2035,7 @@ export default function PhotoStripStudio({
                             </span>
                           </div>
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -1930,6 +2299,17 @@ export default function PhotoStripStudio({
               <span className="font-stamp text-[11px] text-ink/70">
                 Preview {activeLayout.id === 'wide-8' ? '• Wide Landscape' : ''}
               </span>
+              <span className="font-stamp text-[10px] text-rust/80 flex items-center gap-1">
+                <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="5 9 2 12 5 15"/>
+                  <polyline points="9 5 12 2 15 5"/>
+                  <polyline points="15 19 12 22 9 19"/>
+                  <polyline points="19 9 22 12 19 15"/>
+                  <line x1="2" y1="12" x2="22" y2="12"/>
+                  <line x1="12" y1="2" x2="12" y2="22"/>
+                </svg>
+                <span>Drag to relocate</span>
+              </span>
             </div>
 
             <div
@@ -2129,7 +2509,9 @@ export default function PhotoStripStudio({
                             title="Remove from slot"
                             className="absolute -top-1 -right-1 w-4 h-4 bg-rust text-paper-light rounded-full flex items-center justify-center text-[9px] shadow-xs opacity-0 group-hover:opacity-100 transition"
                           >
-                            ✕
+                            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
                           </button>
                         </>
                       ) : (
@@ -2210,7 +2592,9 @@ export default function PhotoStripStudio({
                                 title="Remove one instance"
                                 className="w-3.5 h-3.5 rounded-full bg-paper-light/20 hover:bg-paper-light/40 flex items-center justify-center text-paper-light transition"
                               >
-                                ✕
+                                <svg className="w-2 h-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
                               </span>
                             </div>
                           )}
@@ -2265,7 +2649,86 @@ export default function PhotoStripStudio({
             </div>
           </div>
         )}
+
+        </div>
       </div>
-    </div>
+
+      {/* Dedicated Fullscreen Preview & Arrange Modal (completely isolated at root z-[100]) */}
+      {isMobilePreviewExpanded && (
+        <div className="fixed inset-0 z-[100] bg-paper-light flex flex-col animate-in fade-in duration-200">
+          {/* Modal Top Bar */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-line bg-paper shrink-0 shadow-xs">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-xs bg-rust/10 border border-rust/25 flex items-center justify-center text-rust shrink-0">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="5 9 2 12 5 15"/>
+                  <polyline points="9 5 12 2 15 5"/>
+                  <polyline points="15 19 12 22 9 19"/>
+                  <polyline points="19 9 22 12 19 15"/>
+                  <line x1="2" y1="12" x2="22" y2="12"/>
+                  <line x1="12" y1="2" x2="12" y2="22"/>
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-display font-medium text-ink text-sm leading-tight">
+                  Arrange Photo Strip
+                </h3>
+                <p className="font-display italic text-[11px] text-ink/65 leading-none mt-0.5">
+                  {slotToSwapIndex !== null
+                    ? 'Tap any other slot to swap'
+                    : 'Drag photos to relocate, or tap two photos to swap'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setIsMobilePreviewExpanded(false);
+                setSlotToSwapIndex(null);
+              }}
+              className="px-3.5 py-1.5 bg-rust hover:bg-rust-dark text-paper-light font-display font-medium text-xs rounded-xs shadow-print flex items-center gap-1 transition"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              <span>Done</span>
+            </button>
+          </div>
+
+          {/* Stage Area: Centered, spacious, natural scale (100%), no squishing */}
+          <div className="flex-1 overflow-y-auto no-scrollbar p-4 flex flex-col items-center justify-center min-h-0 bg-paper/30">
+            <div className={`w-full ${
+              activeLayout.id === 'wide-8' ? 'max-w-[460px]' : 'max-w-[310px]'
+            } flex flex-col items-center my-auto transition-all`}>
+              {renderPhotoStripCard(true)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Floating Drag Thumbnail Follower */}
+      {touchDraggingSlotIndex !== null && touchCurrentPos && slotPhotoIds[touchDraggingSlotIndex] && (
+        <div
+          style={{
+            left: `${touchCurrentPos.x}px`,
+            top: `${touchCurrentPos.y}px`,
+          }}
+          className="fixed z-[120] pointer-events-none -translate-x-1/2 -translate-y-[135%] transition-transform duration-75"
+        >
+          <div className="w-16 h-12 bg-paper-light border-2 border-rust shadow-2xl rounded-[2px] overflow-hidden flex items-center justify-center ring-4 ring-black/25">
+            {slotItems[touchDraggingSlotIndex] && (
+              <img
+                src={slotItems[touchDraggingSlotIndex]?.previewUrl || slotItems[touchDraggingSlotIndex]?.url || ''}
+                alt="Moving photo"
+                className="w-full h-full object-cover"
+              />
+            )}
+          </div>
+          <div className="bg-rust text-paper-light font-stamp text-[8px] text-center px-1 rounded-2xs mt-0.5 shadow-xs">
+            Relocating
+          </div>
+        </div>
+      )}
+    </>
   );
 }
