@@ -46,7 +46,7 @@ export default function Page() {
   const [activeTab, setActiveTab] = useState<'reel' | 'trash'>('reel');
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [isDeckMode, setIsDeckMode] = useState<boolean>(true);
+  const [isDeckMode, setIsDeckMode] = useState<boolean>(false);
 
   useEffect(() => {
     async function checkExistingSession() {
@@ -129,7 +129,31 @@ export default function Page() {
           })
         );
 
-        setItems(loaded);
+        setItems((prev) => {
+          if (prev.length === 0) return loaded;
+
+          const loadedKeys = new Set(
+            loaded.map((item) => item.key || item.id).filter(Boolean)
+          );
+          const loadedUrls = new Set(
+            loaded.map((item) => item.url).filter(Boolean)
+          );
+
+          // Keep items from prev that are still uploading, queued, or recently finished but not yet returned by Cloudinary
+          const pendingOrUnsynced = prev.filter((item) => {
+            if (item.status === 'uploading' || item.status === 'queued') {
+              return true;
+            }
+            if (item.status === 'done') {
+              const hasKey = item.key && loadedKeys.has(item.key);
+              const hasUrl = item.url && loadedUrls.has(item.url);
+              return !hasKey && !hasUrl;
+            }
+            return false;
+          });
+
+          return [...pendingOrUnsynced, ...loaded];
+        });
       }
     } catch (err) {
       console.error('Failed to load media from Cloudinary:', err);
@@ -180,9 +204,6 @@ export default function Page() {
           )
         );
 
-        // Re-sync with Cloudinary
-        loadMediaFromCloudinary();
-
         if (res.url) {
           return {
             filename: item.file.name,
@@ -204,7 +225,7 @@ export default function Page() {
         return null;
       }
     },
-    [loadMediaFromCloudinary]
+    []
   );
 
   const handleFiles = useCallback((files: FileList) => {
@@ -253,6 +274,9 @@ export default function Page() {
         console.error('Failed to send batch Discord notification:', err);
       }
     }
+
+    // Re-sync with Cloudinary once all batch uploads complete
+    loadMediaFromCloudinary();
   }
 
   function handleCancelUpload() {
