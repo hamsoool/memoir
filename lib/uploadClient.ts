@@ -9,12 +9,16 @@ import type { UploadResponse } from './types';
 export function uploadFile(
   file: File,
   onProgress: (percent: number) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  skipDiscord = true
 ): Promise<UploadResponse> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const formData = new FormData();
     formData.append('file', file);
+    if (skipDiscord) {
+      formData.append('skipDiscord', 'true');
+    }
 
     xhr.open('POST', '/api/upload');
 

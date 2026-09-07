@@ -46,13 +46,17 @@ export async function POST(request: Request) {
         resourceType: 'auto',
       });
 
-      // Notify Discord channel asynchronously (if DISCORD_WEBHOOK_URL is configured)
-      await sendToDiscord({
-        filename: file.name,
-        url: result.secure_url,
-        kind: file.type.startsWith('video/') ? 'video' : 'image',
-        publicId: result.public_id,
-      });
+      const skipDiscord = formData.get('skipDiscord') === 'true';
+
+      // Notify Discord channel asynchronously only if not part of a multi-item batch
+      if (!skipDiscord) {
+        await sendToDiscord({
+          filename: file.name,
+          url: result.secure_url,
+          kind: file.type.startsWith('video/') ? 'video' : 'image',
+          publicId: result.public_id,
+        });
+      }
 
       return NextResponse.json({
         ok: true,

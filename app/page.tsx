@@ -144,7 +144,7 @@ export default function Page() {
   }, [unlocked, loadMediaFromCloudinary]);
 
   const startUpload = useCallback(
-    (item: UploadItem) => {
+    async (item: UploadItem) => {
       setItems((prev) =>
         prev.map((i) =>
           i.id === item.id
@@ -153,42 +153,55 @@ export default function Page() {
         )
       );
 
-      if (!item.file) return;
+      if (!item.file) return null;
 
-      uploadFile(item.file, (percent) => {
-        setItems((prev) =>
-          prev.map((i) => (i.id === item.id ? { ...i, progress: percent } : i))
-        );
-      })
-        .then((res) => {
+      try {
+        const res = await uploadFile(item.file, (percent) => {
           setItems((prev) =>
-            prev.map((i) =>
-              i.id === item.id
-                ? {
-                    ...i,
-                    status: 'done',
-                    progress: 100,
-                    url: res.url,
-                    key: res.key,
-                    bytes: item.file?.size,
-                    createdAt: new Date().toISOString(),
-                    isTrashed: false,
-                  }
-                : i
-            )
-          );
-          // Re-sync with Cloudinary
-          loadMediaFromCloudinary();
-        })
-        .catch((err: Error) => {
-          setItems((prev) =>
-            prev.map((i) =>
-              i.id === item.id
-                ? { ...i, status: 'error', error: err.message }
-                : i
-            )
+            prev.map((i) => (i.id === item.id ? { ...i, progress: percent } : i))
           );
         });
+
+        setItems((prev) =>
+          prev.map((i) =>
+            i.id === item.id
+              ? {
+                  ...i,
+                  status: 'done',
+                  progress: 100,
+                  url: res.url,
+                  key: res.key,
+                  bytes: item.file?.size,
+                  createdAt: new Date().toISOString(),
+                  isTrashed: false,
+                }
+              : i
+          )
+        );
+
+        // Re-sync with Cloudinary
+        loadMediaFromCloudinary();
+
+        if (res.url) {
+          return {
+            filename: item.file.name,
+            url: res.url,
+            kind: item.kind,
+            publicId: res.key,
+          };
+        }
+        return null;
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Upload failed';
+        setItems((prev) =>
+          prev.map((i) =>
+            i.id === item.id
+              ? { ...i, status: 'error', error: errorMsg }
+              : i
+          )
+        );
+        return null;
+      }
     },
     [loadMediaFromCloudinary]
   );
@@ -215,12 +228,37 @@ export default function Page() {
     setPendingItems((prev) => [...prev, ...newItems]);
   }, []);
 
-  function handleConfirmUpload() {
+  async function handleConfirmUpload() {
     if (pendingItems.length === 0) return;
     const toUpload = [...pendingItems];
     setItems((prev) => [...toUpload, ...prev]);
     setPendingItems([]);
-    toUpload.forEach(startUpload);
+
+    // Upload all files and collect results
+    const results = await Promise.all(toUpload.map((item) => startUpload(item)));
+    const successful = results.filter(
+      (
+        r
+      ): r is {
+        filename: string;
+        url: string;
+        kind: 'image' | 'video';
+        publicId?: string;
+      } => r !== null && Boolean(r.url)
+    );
+
+    // Send a single combined Discord message for all uploaded attachments
+    if (successful.length > 0) {
+      try {
+        await fetch('/api/discord', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: successful }),
+        });
+      } catch (err) {
+        console.error('Failed to send batch Discord notification:', err);
+      }
+    }
   }
 
   function handleCancelUpload() {
@@ -355,9 +393,22 @@ export default function Page() {
     });
   }
 
-  function handleRetry(id: string) {
+  async function handleRetry(id: string) {
     const item = items.find((i) => i.id === id);
-    if (item) startUpload(item);
+    if (item) {
+      const res = await startUpload(item);
+      if (res && res.url) {
+        try {
+          await fetch('/api/discord', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: [res] }),
+          });
+        } catch (err) {
+          console.error('Failed to notify Discord on retry:', err);
+        }
+      }
+    }
   }
 
   // Split items into active vs trashed
