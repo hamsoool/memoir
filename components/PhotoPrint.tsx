@@ -20,6 +20,9 @@ export default function PhotoPrint({
   onTrash,
   onRestore,
   isTrashView = false,
+  isSelectMode = false,
+  isSelected = false,
+  onToggleSelect,
 }: {
   item: UploadItem;
   index: number;
@@ -28,6 +31,9 @@ export default function PhotoPrint({
   onTrash?: (id: string) => void;
   onRestore?: (id: string) => void;
   isTrashView?: boolean;
+  isSelectMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   const rotation = ROTATIONS[index % ROTATIONS.length];
   const displayName = item.file?.name || item.name || 'Memory';
@@ -36,14 +42,51 @@ export default function PhotoPrint({
 
   return (
     <div
+      onClick={() => {
+        if (isSelectMode && onToggleSelect) {
+          onToggleSelect(item.id);
+        }
+      }}
       className={`relative bg-paper-light p-2.5 sm:p-3 pb-3 sm:pb-3.5 shadow-print rounded-[2px] ${rotation}
-        hover:rotate-0 focus-within:rotate-0 transition-transform duration-200 flex flex-col justify-between`}
+        hover:rotate-0 focus-within:rotate-0 transition-all duration-200 flex flex-col justify-between
+        ${isSelectMode ? 'cursor-pointer select-none' : ''}
+        ${isSelected ? 'ring-2 ring-rust shadow-md scale-[1.01]' : ''}`}
     >
       {/* washi-tape corner accent */}
       <span className="absolute -top-1.5 left-5 w-8 sm:w-9 h-3 sm:h-3.5 bg-tape/80 rotate-[-6deg] shadow-xs pointer-events-none" />
 
-      {/* Top right quick-action button */}
-      {!isTrashView ? (
+      {/* Top right quick-action button or select checkbox */}
+      {isSelectMode ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onToggleSelect) onToggleSelect(item.id);
+          }}
+          aria-label={isSelected ? `Deselect ${displayName}` : `Select ${displayName}`}
+          className="absolute top-1.5 right-1.5 z-20 w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full flex items-center justify-center transition-all"
+        >
+          <div
+            className={`w-5 h-5 sm:w-5.5 sm:h-5.5 rounded-full border-2 flex items-center justify-center transition-all ${
+              isSelected
+                ? 'bg-rust border-rust text-paper-light shadow-xs scale-105'
+                : 'bg-paper-light/95 border-ink/40 hover:border-ink text-transparent'
+            }`}
+          >
+            <svg
+              className={`w-3 h-3 ${isSelected ? 'opacity-100' : 'opacity-0'}`}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </div>
+        </button>
+      ) : !isTrashView ? (
         <button
           type="button"
           onClick={() => (onTrash ? onTrash(item.id) : onRemove(item.id))}
@@ -70,7 +113,7 @@ export default function PhotoPrint({
         <button
           type="button"
           onClick={() => onRemove(item.id)}
-          title="Permanently Delete from Cloudinary"
+          title="Permanently Delete"
           aria-label={`Permanently delete ${displayName}`}
           className="absolute top-1.5 right-1.5 z-10 w-5 h-5 sm:w-5.5 sm:h-5.5 rounded-full bg-rust hover:bg-rust-dark
             text-paper-light text-xs flex items-center justify-center transition-colors shadow-xs"

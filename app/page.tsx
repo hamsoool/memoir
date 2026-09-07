@@ -48,6 +48,18 @@ export default function Page() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [isDeckMode, setIsDeckMode] = useState<boolean>(false);
 
+  // Trash Multi-Selection states
+  const [isSelectingTrash, setIsSelectingTrash] = useState<boolean>(false);
+  const [selectedTrashIds, setSelectedTrashIds] = useState<Set<string>>(new Set());
+
+  // Reset selection when leaving trash tab
+  useEffect(() => {
+    if (activeTab !== 'trash') {
+      setIsSelectingTrash(false);
+      setSelectedTrashIds(new Set());
+    }
+  }, [activeTab]);
+
   useEffect(() => {
     async function checkExistingSession() {
       try {
@@ -345,12 +357,12 @@ export default function Page() {
 
     setConfirmModal({
       isOpen: true,
-      title: 'Permanently discard memory?',
+      title: 'Permanently delete memory?',
       badge: 'destructive action',
       itemName: target.name || (target.kind === 'image' ? 'Photograph' : 'Motion Film'),
       description:
-        'This memory will be permanently removed from Cloudinary storage. Once discarded, it cannot be retrieved or developed again.',
-      confirmLabel: 'Discard Forever',
+        'This memory will be permanently deleted. Once removed, it cannot be recovered or brought back.',
+      confirmLabel: 'Delete Forever',
       cancelLabel: 'Keep in Trash',
       isDestructive: true,
       thumbnailUrl: target.previewUrl,
@@ -363,6 +375,11 @@ export default function Page() {
 
         // Optimistically remove from state
         setItems((prev) => prev.filter((i) => i.id !== id));
+        setSelectedTrashIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
 
         if (target.key) {
           try {
@@ -380,6 +397,109 @@ export default function Page() {
     });
   }
 
+  // Toggle selection for a single trash item
+  function handleToggleSelectTrashItem(id: string) {
+    setSelectedTrashIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  // Toggle Select All / Deselect All for trash items
+  function handleToggleSelectAllTrash() {
+    const trashed = items.filter((i) => i.isTrashed);
+    if (selectedTrashIds.size === trashed.length) {
+      setSelectedTrashIds(new Set());
+    } else {
+      setSelectedTrashIds(new Set(trashed.map((i) => i.id)));
+    }
+  }
+
+  // Permanently delete all selected trash items
+  function handleDeleteSelected() {
+    const selectedList = items.filter((i) => selectedTrashIds.has(i.id));
+    if (selectedList.length === 0) return;
+
+    const count = selectedList.length;
+    setConfirmModal({
+      isOpen: true,
+      title: count === 1 ? 'Permanently delete memory?' : `Permanently delete ${count} memories?`,
+      badge: `destructive action • ${count} ${count === 1 ? 'item' : 'items'}`,
+      description:
+        count === 1
+          ? 'This memory will be permanently removed. Once deleted, it cannot be recovered.'
+          : `These ${count} memories will be permanently removed. Once deleted, they cannot be recovered.`,
+      confirmLabel: `Delete Forever (${count})`,
+      cancelLabel: 'Keep in Trash',
+      isDestructive: true,
+      thumbnailUrl: count === 1 ? selectedList[0].previewUrl : undefined,
+      thumbnailKind: count === 1 ? selectedList[0].kind : undefined,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        selectedList.forEach((item) => {
+          if (item.previewUrl && item.previewUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(item.previewUrl);
+          }
+        });
+
+        // Optimistically remove from state
+        setItems((prev) => prev.filter((i) => !selectedTrashIds.has(i.id)));
+        setSelectedTrashIds(new Set());
+        setIsSelectingTrash(false);
+
+        try {
+          await Promise.all(
+            selectedList.map(async (target) => {
+              if (!target.key) return;
+              return fetch('/api/media', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ publicId: target.key, kind: target.kind }),
+              });
+            })
+          );
+          loadMediaFromCloudinary();
+        } catch (err) {
+          console.error('Failed to permanently delete selected assets:', err);
+        }
+      },
+    });
+  }
+
+  // Restore all selected trash items back to reel
+  async function handleRestoreSelected() {
+    const selectedList = items.filter((i) => selectedTrashIds.has(i.id));
+    if (selectedList.length === 0) return;
+
+    // Optimistically restore in state
+    setItems((prev) =>
+      prev.map((i) => (selectedTrashIds.has(i.id) ? { ...i, isTrashed: false } : i))
+    );
+    setSelectedTrashIds(new Set());
+    setIsSelectingTrash(false);
+
+    try {
+      await Promise.all(
+        selectedList.map(async (target) => {
+          if (!target.key) return;
+          return fetch('/api/media/trash', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ publicId: target.key, action: 'restore' }),
+          });
+        })
+      );
+      loadMediaFromCloudinary();
+    } catch (err) {
+      console.error('Failed to restore selected items:', err);
+    }
+  }
+
   // Empty entire Trash
   function handleEmptyTrash() {
     const trashedCount = items.filter((i) => i.isTrashed).length;
@@ -387,17 +507,19 @@ export default function Page() {
 
     setConfirmModal({
       isOpen: true,
-      title: 'Empty discarded memories?',
+      title: 'Empty all discarded memories?',
       badge: `permanent purge • ${trashedCount} ${trashedCount === 1 ? 'item' : 'items'}`,
       description: `All ${trashedCount} discarded ${
         trashedCount === 1 ? 'memory' : 'memories'
-      } will be permanently wiped from Cloudinary storage. This cannot be undone.`,
-      confirmLabel: `Purge All (${trashedCount})`,
+      } will be permanently removed. This cannot be undone.`,
+      confirmLabel: `Delete All (${trashedCount})`,
       cancelLabel: 'Cancel',
       isDestructive: true,
       onConfirm: async () => {
         setConfirmModal(null);
         setItems((prev) => prev.filter((i) => !i.isTrashed));
+        setSelectedTrashIds(new Set());
+        setIsSelectingTrash(false);
 
         try {
           await fetch('/api/media/trash', {
@@ -685,28 +807,91 @@ export default function Page() {
               </button>
             </div>
 
-            {/* Layout Toggle: Decks vs Spread (and Empty Trash button) */}
+            {/* Layout Toggle: Decks vs Spread and Trash Selection Controls */}
             <div className="flex items-center gap-1.5">
               {activeTab === 'trash' && trashedItems.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleEmptyTrash}
-                  className="font-stamp text-[11px] text-rust hover:bg-rust/10 border border-rust/40 px-2 py-1 rounded-xs transition flex items-center gap-1"
-                >
-                  <svg
-                    className="w-3 h-3"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  </svg>
-                  <span>Purge</span>
-                </button>
+                <div className="flex items-center gap-1 sm:gap-1.5">
+                  {!isSelectingTrash ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setIsSelectingTrash(true)}
+                        className="font-stamp text-[11px] text-ink/75 hover:text-ink hover:bg-ink/5 border border-line bg-paper-light px-2 py-1 rounded-xs transition flex items-center gap-1"
+                        title="Select multiple memories to permanently delete"
+                      >
+                        <svg
+                          className="w-3 h-3 text-ink/60"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <rect x="3" y="3" width="18" height="18" rx="2" />
+                          <path d="M9 12l2 2 4-4" />
+                        </svg>
+                        <span>Select</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleEmptyTrash}
+                        className="font-stamp text-[11px] text-rust hover:bg-rust/10 border border-rust/40 px-2 py-1 rounded-xs transition flex items-center gap-1"
+                        title="Empty all memories in trash"
+                      >
+                        <svg
+                          className="w-3 h-3"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                        <span>Empty All</span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleToggleSelectAllTrash}
+                        className="font-stamp text-[11px] text-ink hover:bg-ink/5 border border-ink/40 bg-paper-light px-2 py-1 rounded-xs transition flex items-center gap-1 font-medium"
+                      >
+                        <svg
+                          className="w-3 h-3"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <rect x="3" y="3" width="18" height="18" rx="2" />
+                          {selectedTrashIds.size === trashedItems.length && trashedItems.length > 0 && (
+                            <path d="M9 12l2 2 4-4" />
+                          )}
+                        </svg>
+                        <span>
+                          {selectedTrashIds.size === trashedItems.length
+                            ? 'Deselect All'
+                            : 'Select All'}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSelectingTrash(false);
+                          setSelectedTrashIds(new Set());
+                        }}
+                        className="font-stamp text-[11px] text-ink/70 hover:text-ink px-1.5 py-1 transition"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                </div>
               )}
 
               <div className="inline-flex rounded-xs border border-line bg-paper-light p-0.5 font-stamp text-xs">
@@ -894,7 +1079,7 @@ export default function Page() {
 
         {/* Trash Notice Banner */}
         {activeTab === 'trash' && (
-          <div className="mb-6 p-3 bg-rust/5 border border-rust/20 rounded-xs font-stamp text-xs text-rust flex items-center gap-2">
+          <div className="mb-5 sm:mb-6 p-3 sm:p-3.5 bg-rust/5 border border-rust/20 rounded-xs font-stamp text-xs text-rust flex items-center gap-2.5">
             <svg
               className="w-4 h-4 shrink-0"
               viewBox="0 0 24 24"
@@ -907,8 +1092,8 @@ export default function Page() {
               <polyline points="3 6 5 6 21 6" />
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
             </svg>
-            <span>
-              Items in the trash are archived. You can restore them to the reel or delete them permanently from Cloudinary.
+            <span className="leading-relaxed">
+              Memories here are tucked away safely. You can bring them back to our reel anytime, or delete them forever.
             </span>
           </div>
         )}
@@ -923,6 +1108,9 @@ export default function Page() {
           onTrash={handleMoveToTrash}
           onRestore={handleRestore}
           isTrashView={activeTab === 'trash'}
+          isSelectMode={activeTab === 'trash' && isSelectingTrash}
+          selectedIds={selectedTrashIds}
+          onToggleSelect={handleToggleSelectTrashItem}
           emptyMessage={
             activeTab === 'trash'
               ? 'Trash is empty'
@@ -934,6 +1122,61 @@ export default function Page() {
               : 'Add your first shot above.'
           }
         />
+
+        {/* Mobile-First Floating Action Bar for Trash Multi-Select */}
+        {activeTab === 'trash' && isSelectingTrash && (
+          <div className="fixed bottom-4 sm:bottom-6 inset-x-0 z-40 flex justify-center px-3 sm:px-4 pointer-events-none animate-fade-in">
+            <div className="bg-paper-light/95 backdrop-blur-md border border-line shadow-print rounded-full px-3.5 sm:px-5 py-2 sm:py-2.5 flex items-center justify-between gap-3 pointer-events-auto w-full max-w-sm sm:max-w-md">
+              <div className="font-stamp text-[11px] sm:text-xs text-ink/80 font-medium whitespace-nowrap pl-1">
+                {selectedTrashIds.size} of {trashedItems.length} selected
+              </div>
+
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleRestoreSelected}
+                  disabled={selectedTrashIds.size === 0}
+                  className="font-stamp text-[11px] sm:text-xs px-2.5 sm:px-3 py-1.5 rounded-full border border-line bg-paper hover:bg-ink/5 text-ink transition disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1"
+                >
+                  <svg
+                    className="w-3 h-3"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="1 4 1 10 7 10" />
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                  </svg>
+                  <span>Restore</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDeleteSelected}
+                  disabled={selectedTrashIds.size === 0}
+                  className="font-stamp text-[11px] sm:text-xs px-3 sm:px-3.5 py-1.5 rounded-full bg-rust hover:bg-rust-dark text-paper-light transition shadow-xs disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1 font-medium"
+                >
+                  <svg
+                    className="w-3 h-3"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                  <span>Delete Forever {selectedTrashIds.size > 0 ? `(${selectedTrashIds.size})` : ''}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Storage stats & Cloudinary 25 GB Capacity Tracker Bar (Placed Below Media Uploaded) */}
         <div className="mt-10 sm:mt-12 p-3.5 sm:p-4.5 bg-paper-light border border-line rounded-sm shadow-print">

@@ -12,6 +12,9 @@ interface MemoryDeckProps {
   onTrash?: (id: string) => void;
   onRestore?: (id: string) => void;
   isTrashView?: boolean;
+  isSelectMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }
 
 export default function MemoryDeck({
@@ -21,9 +24,13 @@ export default function MemoryDeck({
   onTrash,
   onRestore,
   isTrashView = false,
+  isSelectMode = false,
+  selectedIds,
+  onToggleSelect,
 }: MemoryDeckProps) {
   const [isSpread, setIsSpread] = useState(false);
   const items = group.items;
+  const isExpanded = isSpread || Boolean(isSelectMode && isTrashView);
 
   // If there's only 1 item in the group, render it directly without stacking
   if (items.length === 1) {
@@ -41,6 +48,9 @@ export default function MemoryDeck({
           onTrash={onTrash}
           onRestore={onRestore}
           isTrashView={isTrashView}
+          isSelectMode={isSelectMode}
+          isSelected={Boolean(selectedIds?.has(items[0].id))}
+          onToggleSelect={onToggleSelect}
         />
       </div>
     );
@@ -51,7 +61,7 @@ export default function MemoryDeck({
   return (
     <div
       className={`w-full transition-all duration-300 ${
-        isSpread ? 'col-span-full' : ''
+        isExpanded ? 'col-span-full' : ''
       }`}
     >
       {/* Header of the deck */}
@@ -113,7 +123,7 @@ export default function MemoryDeck({
       </div>
 
       {/* When Stacked (Card Deck View) */}
-      {!isSpread ? (
+      {!isExpanded ? (
         <div
           role="button"
           tabIndex={0}
@@ -141,6 +151,9 @@ export default function MemoryDeck({
               onTrash={onTrash}
               onRestore={onRestore}
               isTrashView={isTrashView}
+              isSelectMode={isSelectMode}
+              isSelected={Boolean(selectedIds?.has(topItem.id))}
+              onToggleSelect={onToggleSelect}
             />
 
             {/* Click-to-spread invitation overlay tag */}
@@ -177,6 +190,9 @@ export default function MemoryDeck({
               onTrash={onTrash}
               onRestore={onRestore}
               isTrashView={isTrashView}
+              isSelectMode={isSelectMode}
+              isSelected={Boolean(selectedIds?.has(item.id))}
+              onToggleSelect={onToggleSelect}
             />
           ))}
         </div>

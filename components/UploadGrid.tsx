@@ -14,6 +14,9 @@ export default function UploadGrid({
   onTrash,
   onRestore,
   isTrashView = false,
+  isSelectMode = false,
+  selectedIds,
+  onToggleSelect,
   emptyMessage = 'Nothing developed yet',
   emptySubMessage = 'Add your first shot above.',
 }: {
@@ -25,6 +28,9 @@ export default function UploadGrid({
   onTrash?: (id: string) => void;
   onRestore?: (id: string) => void;
   isTrashView?: boolean;
+  isSelectMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
   emptyMessage?: string;
   emptySubMessage?: string;
 }) {
@@ -50,6 +56,9 @@ export default function UploadGrid({
             onTrash={onTrash}
             onRestore={onRestore}
             isTrashView={isTrashView}
+            isSelectMode={isSelectMode}
+            selectedIds={selectedIds}
+            onToggleSelect={onToggleSelect}
           />
         ))}
       </div>
@@ -69,6 +78,9 @@ export default function UploadGrid({
           onTrash={onTrash}
           onRestore={onRestore}
           isTrashView={isTrashView}
+          isSelectMode={isSelectMode}
+          isSelected={Boolean(selectedIds?.has(item.id))}
+          onToggleSelect={onToggleSelect}
         />
       ))}
     </div>
