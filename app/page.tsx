@@ -15,8 +15,8 @@ type SortField = 'date' | 'size' | 'type';
 type SortOrder = 'desc' | 'asc';
 
 export default function Page() {
-  const clientNeedsGate = Boolean(process.env.NEXT_PUBLIC_ACCESS_CODE);
-  const [unlocked, setUnlocked] = useState(!clientNeedsGate && isAlreadyUnlocked());
+  const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
+  const [unlocked, setUnlocked] = useState<boolean>(false);
   const [isDevelopingIntro, setIsDevelopingIntro] = useState<boolean>(false);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [pendingItems, setPendingItems] = useState<UploadItem[]>([]);
@@ -31,38 +31,40 @@ export default function Page() {
 
   useEffect(() => {
     async function checkExistingSession() {
-      // 1. Fast local session check
-      if (isAlreadyUnlocked()) {
-        setUnlocked(true);
-        setIsDevelopingIntro(true);
-        return;
-      }
-
-      // 2. Query Upstash Redis session & server-side gate requirement
       try {
         const res = await fetch('/api/auth/session');
         const data = await res.json();
 
         if (data.ok) {
-          if (!data.gateRequired || data.authenticated) {
+          // If no passcode is set on server, open darkroom freely
+          if (!data.gateRequired) {
             setUnlocked(true);
             setIsDevelopingIntro(true);
             return;
           }
+
+          // If device is already authorized by 90-day cookie or IP in Upstash Redis
+          if (data.authenticated) {
+            setUnlocked(true);
+            setIsDevelopingIntro(true);
+            return;
+          }
+
+          // Gate is required and device is not yet authorized: keep locked
+          setUnlocked(false);
+        } else {
+          setUnlocked(false);
         }
       } catch (err) {
         console.error('Failed to check session from server:', err);
-      }
-
-      // If no passcode gate was set in client either, unlock
-      if (!clientNeedsGate) {
-        setUnlocked(true);
-        setIsDevelopingIntro(true);
+        setUnlocked(false);
+      } finally {
+        setIsCheckingAuth(false);
       }
     }
 
     checkExistingSession();
-  }, [clientNeedsGate]);
+  }, []);
 
   const loadMediaFromCloudinary = useCallback(async () => {
     try {
@@ -408,6 +410,28 @@ export default function Page() {
     setIsDevelopingIntro(true);
   }
 
+  async function handleLock() {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to log out device:', err);
+    }
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem('memoir-unlocked');
+    }
+    setUnlocked(false);
+  }
+
+  if (isCheckingAuth) {
+    return (
+      <main className="min-h-dvh flex items-center justify-center bg-paper">
+        <div className="text-center font-display italic text-2xl text-ink/30 animate-pulse tracking-wide">
+          Memoir
+        </div>
+      </main>
+    );
+  }
+
   if (!unlocked) {
     return <AccessGate onUnlock={handleUnlock} />;
   }
@@ -423,7 +447,7 @@ export default function Page() {
       <main className="min-h-dvh px-4 sm:px-6 md:px-8 py-6 sm:py-10 max-w-4xl mx-auto">
         <div className="sprocket-strip mb-6 sm:mb-7" />
 
-      <FilmHeader count={activeItems.length} />
+      <FilmHeader count={activeItems.length} onLock={handleLock} />
 
       <section className="mb-7 sm:mb-8">
         <DropZone onFiles={handleFiles} />
