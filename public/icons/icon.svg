@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#241E1A"/>
+      <stop offset="70%" stop-color="#14110F"/>
+      <stop offset="100%" stop-color="#0A0807"/>
+    </radialGradient>
+    <linearGradient id="terracotta" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E27351"/>
+      <stop offset="100%" stop-color="#B24929"/>
+    </linearGradient>
+    <linearGradient id="filmGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F2D396"/>
+      <stop offset="100%" stop-color="#C59E50"/>
+    </linearGradient>
+    <filter id="subtleShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Background Canvas -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  <rect width="504" height="504" x="4" y="4" rx="108" fill="none" stroke="#3D342C" stroke-width="3" stroke-opacity="0.6"/>
+
+  <!-- Vintage Film Canister / Reel Outer Silhouette -->
+  <g filter="url(#subtleShadow)">
+    <!-- Outer Rim -->
+    <circle cx="256" cy="256" r="172" fill="#1C1814" stroke="#4A3F35" stroke-width="4"/>
+    
+    <!-- Film Reel Holes (35mm aesthetic) -->
+    <circle cx="256" cy="126" r="22" fill="#0E0C0A" stroke="#383028" stroke-width="3"/>
+    <circle cx="256" cy="386" r="22" fill="#0E0C0A" stroke="#383028" stroke-width="3"/>
+    <circle cx="126" cy="256" r="22" fill="#0E0C0A" stroke="#383028" stroke-width="3"/>
+    <circle cx="386" cy="256" r="22" fill="#0E0C0A" stroke="#383028" stroke-width="3"/>
+    <circle cx="164" cy="164" r="18" fill="#0E0C0A" stroke="#383028" stroke-width="3"/>
+    <circle cx="348" cy="164" r="18" fill="#0E0C0A" stroke="#383028" stroke-width="3"/>
+    <circle cx="164" cy="348" r="18" fill="#0E0C0A" stroke="#383028" stroke-width="3"/>
+    <circle cx="348" cy="348" r="18" fill="#0E0C0A" stroke="#383028" stroke-width="3"/>
+
+    <!-- Inner Core with Terracotta Ring -->
+    <circle cx="256" cy="256" r="106" fill="url(#terracotta)" stroke="#F4EDE2" stroke-width="4"/>
+    
+    <!-- Center Paper Aperture -->
+    <circle cx="256" cy="256" r="76" fill="#F6F0E6"/>
+    
+    <!-- Vintage 35mm Frame Centerpiece -->
+    <rect x="214" y="218" width="84" height="76" rx="10" fill="#1C1814"/>
+    <circle cx="256" cy="256" r="24" fill="url(#terracotta)" stroke="#F6F0E6" stroke-width="3"/>
+    <circle cx="256" cy="256" r="10" fill="#1C1814"/>
+    <circle cx="282" cy="232" r="5" fill="#E5B560"/>
+  </g>
+
+  <!-- Vintage Corner Sprocket Accents -->
+  <rect x="42" y="42" width="28" height="42" rx="4" fill="#241E1A" stroke="#3D342C" stroke-width="2"/>
+  <rect x="442" y="42" width="28" height="42" rx="4" fill="#241E1A" stroke="#3D342C" stroke-width="2"/>
+  <rect x="42" y="428" width="28" height="42" rx="4" fill="#241E1A" stroke="#3D342C" stroke-width="2"/>
+  <rect x="442" y="428" width="28" height="42" rx="4" fill="#241E1A" stroke="#3D342C" stroke-width="2"/>
+</svg>

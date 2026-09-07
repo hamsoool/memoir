@@ -65,11 +65,10 @@ export default function DevelopingSplash({
         <span className="absolute -top-3 left-8 w-12 h-5 bg-tape/80 rotate-[-5deg] shadow-xs pointer-events-none" />
         <span className="absolute -bottom-3 right-8 w-12 h-5 bg-tape/80 rotate-[4deg] shadow-xs pointer-events-none" />
 
-        {/* Small stamped memories header */}
-        <div className="flex items-center gap-2 mb-6">
-          <span className="w-2 h-2 rounded-full bg-rust animate-pulse" />
-          <p className="font-stamp text-[11px] text-ink/50 uppercase tracking-widest">
-            Developing Memories
+        {/* Stamped developer credit header */}
+        <div className="mb-6">
+          <p className="font-stamp text-[11px] text-ink/60 tracking-wider uppercase">
+            Developed by <span className="normal-case font-bold text-ink">SOUL.jsx</span>
           </p>
         </div>
 
@@ -96,17 +95,19 @@ export default function DevelopingSplash({
         </div>
 
         {/* Dynamic Memory Status Log */}
-        <div className="mt-6 space-y-1.5 min-h-[3rem]">
+        <div className="mt-6 space-y-1.5 min-h-[2.5rem]">
           <p className="font-stamp text-xs text-ink/75 transition-all duration-300">
             {phase === 'exposing' && 'submerging negative in developer bath…'}
             {phase === 'developing' && 'silver halide reacting • image forming…'}
-            {phase === 'fixing' && 'rinsing in fixer • stabilizing our reel…'}
-            {phase === 'ready' && 'print fully developed • opening our memories…'}
+            {phase === 'fixing' && 'rinsing in fixer • stabilizing reel…'}
+            {phase === 'ready' && 'print fully developed…'}
           </p>
 
-          <p className="font-stamp text-[10px] text-ink/40">
-            {isLoadingMedia ? 'syncing our favorite moments…' : 'safe and timeless for the two of us'}
-          </p>
+          {isLoadingMedia && (
+            <p className="font-stamp text-[10px] text-ink/40">
+              syncing media…
+            </p>
+          )}
         </div>
 
         {/* Developing chemical progress line */}

@@ -100,6 +100,176 @@ main {
   animation: projector-breathe 12s ease-in-out infinite;
 }
 
+/* Gentle, eye-soothing progressive reveal animations */
+@keyframes studio-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-studio-reveal {
+  animation: studio-reveal 650ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, transform;
+}
+
+.animate-studio-reveal-delayed {
+  animation: studio-reveal 750ms cubic-bezier(0.16, 1, 0.3, 1) 120ms forwards;
+  will-change: opacity, transform;
+}
+
+/* Photobooth Strip Morph & Buildup Animations */
+@keyframes strip-morph {
+  0% {
+    transform: scale(0.96) translateY(5px);
+    opacity: 0.88;
+  }
+  60% {
+    transform: scale(1.012) translateY(-1px);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-strip-morph {
+  animation: strip-morph 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+@keyframes slot-cascade {
+  0% {
+    opacity: 0;
+    transform: scale(0.90) translateY(8px);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.02) translateY(-1px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-slot-cascade {
+  animation: slot-cascade 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+@keyframes photo-develop {
+  0% {
+    opacity: 0;
+    transform: scale(0.97);
+    filter: blur(2px) contrast(0.96);
+  }
+  50% {
+    opacity: 0.88;
+    transform: scale(1.005);
+    filter: blur(0.5px) contrast(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: none;
+  }
+}
+
+.animate-photo-develop {
+  animation: photo-develop 580ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity, filter;
+}
+
+@keyframes layout-pop {
+  0% {
+    transform: scale(0.97);
+  }
+  50% {
+    transform: scale(1.025);
+  }
+  100% {
+    transform: scale(1.01);
+  }
+}
+
+.animate-layout-pop {
+  animation: layout-pop 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes pulse-gentle {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  50% {
+    transform: scale(1.03);
+    opacity: 1;
+  }
+}
+
+.animate-pulse-gentle {
+  animation: pulse-gentle 2.4s ease-in-out infinite;
+}
+
+/* Photobooth Ink Stamp Text Animations */
+@keyframes char-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.68) translateY(3px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.15) translateY(-1px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-char-pop {
+  animation: char-pop 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+@keyframes stamp-bounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.35) rotate(-12deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.22) rotate(4deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.animate-stamp-bounce {
+  animation: stamp-bounce 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+/* Hide scrollbar completely across Chrome, Safari, Edge, Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .bg-radial-vignette {
   background: radial-gradient(
     ellipse at 50% 30%,
@@ -244,3 +414,14 @@ main {
 .font-stamp {
   font-family: var(--font-stamp), 'Courier New', monospace;
 }
+
+/* PWA Standalone & Mobile Safe Areas */
+@supports (padding-top: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+

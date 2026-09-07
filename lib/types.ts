@@ -23,4 +23,6 @@ export interface UploadResponse {
   url?: string;
   error?: string;
   mock?: boolean;
+  isDuplicate?: boolean;
+  message?: string;
 }

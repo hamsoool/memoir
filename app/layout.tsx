@@ -25,16 +25,38 @@ const specialElite = Special_Elite({
 export const metadata: Metadata = {
   title: 'Memoir',
   description: 'A private reel of memories for the two of us.',
+  manifest: '/manifest.webmanifest',
+  icons: {
+    icon: [
+      { url: '/icons/icon.svg', type: 'image/svg+xml' },
+      { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Memoir',
+  },
+  applicationName: 'Memoir',
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export const viewport: Viewport = {
-  themeColor: '#F2E8D3',
+  themeColor: '#0E0C0A',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
 };
 
 import VintageFilmBackground from '@/components/VintageFilmBackground';
+import PwaRegister from '@/components/PwaRegister';
 
 export default function RootLayout({
   children,
@@ -46,6 +68,7 @@ export default function RootLayout({
       <body>
         <VintageFilmBackground />
         {children}
+        <PwaRegister />
       </body>
     </html>
   );

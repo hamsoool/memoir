@@ -22,10 +22,10 @@ export default function FilmHeader({
         </button>
       )}
 
-      <p className="font-stamp text-[11px] sm:text-xs text-ink/50 mb-1.5">
-        exposure {String(count).padStart(3, '0')}
+      <p className="font-stamp text-[11px] sm:text-xs text-ink/50 mb-1.5 tracking-wider">
+        together since 01/07/26
       </p>
-      <h1 className="font-display italic font-medium text-3xl sm:text-4xl text-ink leading-none">
+      <h1 className="font-display italic font-medium text-4xl sm:text-5xl text-ink leading-none tracking-tight">
         Memoir
       </h1>
       <p className="text-ink/75 mt-2 max-w-md mx-auto leading-relaxed text-xs sm:text-sm font-display italic">

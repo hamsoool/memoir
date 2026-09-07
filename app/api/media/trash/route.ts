@@ -3,6 +3,7 @@ import {
   tagCloudinaryMedia,
   untagCloudinaryMedia,
   deleteCloudinaryMedia,
+  bulkDeleteCloudinaryMedia,
   getCloudinaryMedia,
   isCloudinaryConfigured,
 } from '@/lib/cloudinary';
@@ -59,15 +60,18 @@ export async function DELETE() {
     const { items } = await getCloudinaryMedia();
     const trashedItems = items.filter((i) => i.isTrashed);
 
-    const results = await Promise.all(
-      trashedItems.map((item) =>
-        deleteCloudinaryMedia(item.publicId, item.kind)
-      )
-    );
+    if (trashedItems.length > 0) {
+      await bulkDeleteCloudinaryMedia(
+        trashedItems.map((item) => ({
+          publicId: item.publicId,
+          kind: item.kind,
+        }))
+      );
+    }
 
     return NextResponse.json({
       ok: true,
-      deletedCount: results.length,
+      deletedCount: trashedItems.length,
     });
   } catch (err) {
     console.error('[Memoir] Error emptying trash from Cloudinary:', err);

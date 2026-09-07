@@ -8,6 +8,7 @@ import AccessGate, { isAlreadyUnlocked } from '@/components/AccessGate';
 import ConfirmUploadModal from '@/components/ConfirmUploadModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import PhotoLightbox from '@/components/PhotoLightbox';
+import PhotoStripStudio from '@/components/PhotoStripStudio';
 import DevelopingSplash from '@/components/DevelopingSplash';
 import { uploadFile } from '@/lib/uploadClient';
 import { fileKind, formatBytes, groupMemories, makeId } from '@/lib/format';
@@ -48,6 +49,7 @@ export default function Page() {
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [isDeckMode, setIsDeckMode] = useState<boolean>(false);
+  const [isStripStudioOpen, setIsStripStudioOpen] = useState<boolean>(false);
 
   // Trash Multi-Selection states - default to true when in trash
   const [isSelectingTrash, setIsSelectingTrash] = useState<boolean>(true);
@@ -222,7 +224,7 @@ export default function Page() {
           )
         );
 
-        if (res.url) {
+        if (res.url && !res.isDuplicate) {
           return {
             filename: item.file.name,
             url: res.url,
@@ -246,27 +248,44 @@ export default function Page() {
     []
   );
 
-  const handleFiles = useCallback((files: FileList) => {
-    const accepted = Array.from(files).filter(
-      (f) => f.type.startsWith('image/') || f.type.startsWith('video/')
-    );
+  const handleFiles = useCallback(
+    (files: FileList) => {
+      const accepted = Array.from(files).filter(
+        (f) => f.type.startsWith('image/') || f.type.startsWith('video/')
+      );
 
-    const newItems: UploadItem[] = accepted.map((file) => ({
-      id: makeId(),
-      file,
-      previewUrl: URL.createObjectURL(file),
-      kind: fileKind(file),
-      status: 'queued',
-      progress: 0,
-      bytes: file.size,
-      name: file.name,
-      createdAt: new Date().toISOString(),
-      isTrashed: false,
-    }));
+      // Filter out files that are already actively in our reel or already queued
+      const existingSignatures = new Set(
+        [...items.filter((i) => !i.isTrashed), ...pendingItems].map(
+          (i) => `${i.name || i.file?.name}-${i.bytes || i.file?.size}`
+        )
+      );
 
-    // Open confirmation modal before sending to Cloudinary
-    setPendingItems((prev) => [...prev, ...newItems]);
-  }, []);
+      const uniqueFiles = accepted.filter((file) => {
+        const signature = `${file.name}-${file.size}`;
+        return !existingSignatures.has(signature);
+      });
+
+      const newItems: UploadItem[] = uniqueFiles.map((file) => ({
+        id: makeId(),
+        file,
+        previewUrl: URL.createObjectURL(file),
+        kind: fileKind(file),
+        status: 'queued',
+        progress: 0,
+        bytes: file.size,
+        name: file.name,
+        createdAt: new Date().toISOString(),
+        isTrashed: false,
+      }));
+
+      // Open confirmation modal before sending to Cloudinary
+      if (newItems.length > 0) {
+        setPendingItems((prev) => [...prev, ...newItems]);
+      }
+    },
+    [items, pendingItems]
+  );
 
   async function handleConfirmUpload() {
     if (pendingItems.length === 0) return;
@@ -387,12 +406,13 @@ export default function Page() {
           return next;
         });
 
-        if (target.key) {
+        const keyToDelete = target.key || target.id;
+        if (keyToDelete) {
           try {
             await fetch('/api/media', {
               method: 'DELETE',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ publicId: target.key, kind: target.kind }),
+              body: JSON.stringify({ publicId: keyToDelete, kind: target.kind }),
             });
             loadMediaFromCloudinary();
           } catch (err) {
@@ -458,16 +478,20 @@ export default function Page() {
         setSelectedTrashIds(new Set());
 
         try {
-          await Promise.all(
-            selectedList.map(async (target) => {
-              if (!target.key) return;
-              return fetch('/api/media', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ publicId: target.key, kind: target.kind }),
-              });
-            })
-          );
+          const toDelete = selectedList
+            .map((target) => ({
+              publicId: target.key || target.id,
+              kind: target.kind,
+            }))
+            .filter((t) => Boolean(t.publicId));
+
+          if (toDelete.length > 0) {
+            await fetch('/api/media', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ items: toDelete }),
+            });
+          }
           loadMediaFromCloudinary();
         } catch (err) {
           console.error('Failed to permanently delete selected assets:', err);
@@ -786,11 +810,67 @@ export default function Page() {
         onNavigate={(nextItem) => setEnlargedItem(nextItem)}
       />
 
+      {/* Photo Strip Studio Modal */}
+      <PhotoStripStudio
+        isOpen={isStripStudioOpen}
+        onClose={() => setIsStripStudioOpen(false)}
+        availableItems={items}
+      />
+
+      {/* Emphasized Photo Booth Strip Studio Keepsake Card */}
+      <div className="mb-4 sm:mb-5 p-3 sm:p-4 bg-paper-light border border-line rounded-sm shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 relative overflow-hidden group">
+        {/* washi-tape accent */}
+        <span className="absolute -top-1 left-6 w-12 h-3 bg-tape/80 rotate-[-3deg] shadow-2xs pointer-events-none" />
+
+        <div className="flex items-center gap-3 text-center sm:text-left">
+          <div className="w-10 h-10 rounded-xs bg-rust/10 border border-rust/30 flex items-center justify-center text-rust shrink-0">
+            <svg
+              className="w-5 h-5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M7 3v18" />
+              <path d="M17 3v18" />
+              <path d="M3 7.5h4" />
+              <path d="M3 12h4" />
+              <path d="M3 16.5h4" />
+              <path d="M17 7.5h4" />
+              <path d="M17 12h4" />
+              <path d="M17 16.5h4" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="font-display font-medium text-sm sm:text-base text-ink leading-tight">
+              Photo Booth Strip Studio
+            </h3>
+            <p className="font-display italic text-xs text-ink/65 mt-0.5">
+              Turn our favorite memories into cute printed photo strips
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsStripStudioOpen(true)}
+          className="w-full sm:w-auto px-4 py-2 bg-rust hover:bg-rust-dark text-paper-light font-display font-medium text-xs rounded-xs shadow-print hover:shadow-md transition flex items-center justify-center gap-2 shrink-0 group-hover:scale-[1.01]"
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+          </svg>
+          <span>Create Photo Strip</span>
+        </button>
+      </div>
+
       <section>
         {/* View Switcher & Sorting Controls Bar */}
         <div className="mb-5 p-1.5 sm:p-2 bg-paper border border-line rounded-sm flex flex-col md:flex-row md:items-center justify-between gap-1.5 sm:gap-2">
           {/* Row 1 on mobile / Left on desktop: Tabs & Layout Toggle */}
-          <div className="flex items-center justify-between gap-2 w-full md:w-auto">
+          <div className="flex items-center justify-between gap-2 w-full md:w-auto flex-wrap">
             {/* Tabs: Reel vs Trash */}
             <div className="inline-flex rounded-xs border border-line bg-paper-light p-0.5 font-stamp text-xs">
               <button
@@ -850,8 +930,8 @@ export default function Page() {
               </button>
             </div>
 
-            {/* Layout Toggle: Decks vs Spread and Trash Empty button */}
-            <div className="flex items-center gap-1.5">
+            {/* Layout Toggle: Decks vs Spread, Photo Strip, and Trash Empty button */}
+            <div className="flex items-center gap-1.5 flex-wrap">
               {activeTab === 'trash' && trashedItems.length > 0 && (
                 <button
                   type="button"
@@ -1198,12 +1278,6 @@ export default function Page() {
                   )}{' '}
                   of 25 GB used
                 </h2>
-                {hasReduction && (
-                  <span className="font-stamp text-[10px] sm:text-[11px] text-rust bg-rust/10 border border-rust/30 px-2.5 py-0.5 rounded-full transition-all duration-300 animate-fade-in flex items-center gap-1.5 font-medium shadow-2xs">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rust animate-pulse" />
-                    <span>-{formatBytes(selectedTrashBytes)} permanently</span>
-                  </span>
-                )}
               </div>
             </div>
             <div className="font-stamp text-[11px] sm:text-xs text-ink/60 flex items-center gap-2.5">

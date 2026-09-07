@@ -1,5 +1,10 @@
+import crypto from 'crypto';
 import { NextResponse } from 'next/server';
-import { uploadBufferToCloudinary, isCloudinaryConfigured } from '@/lib/cloudinary';
+import {
+  uploadBufferToCloudinary,
+  findDuplicateCloudinaryMedia,
+  isCloudinaryConfigured,
+} from '@/lib/cloudinary';
 import { sendToDiscord } from '@/lib/discord';
 
 export const runtime = 'nodejs';
@@ -42,8 +47,28 @@ export async function POST(request: Request) {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 
+      // Compute MD5 checksum of file contents to check for duplicates
+      const md5 = crypto.createHash('md5').update(buffer).digest('hex');
+
+      // 1. Check if this exact file content already exists in Cloudinary
+      const existingAsset = await findDuplicateCloudinaryMedia(md5);
+      if (existingAsset) {
+        return NextResponse.json({
+          ok: true,
+          key: existingAsset.publicId,
+          url: existingAsset.url,
+          isDuplicate: true,
+          message: 'This file is already preserved in Memoir.',
+        });
+      }
+
+      // 2. Fresh upload: save with md5 checksum as publicId and track original name in context
       const result = await uploadBufferToCloudinary(buffer, {
         resourceType: 'auto',
+        publicId: md5,
+        context: {
+          original_name: file.name,
+        },
       });
 
       const skipDiscord = formData.get('skipDiscord') === 'true';

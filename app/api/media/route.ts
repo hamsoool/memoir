@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import {
   getCloudinaryMedia,
   deleteCloudinaryMedia,
+  bulkDeleteCloudinaryMedia,
   getCloudinaryAccountUsage,
   isCloudinaryConfigured,
 } from '@/lib/cloudinary';
@@ -57,6 +58,14 @@ export async function DELETE(request: Request) {
     }
 
     const body = await request.json();
+
+    // Support bulk deletion via body.items
+    if (Array.isArray(body.items) && body.items.length > 0) {
+      await bulkDeleteCloudinaryMedia(body.items);
+      return NextResponse.json({ ok: true, deletedCount: body.items.length });
+    }
+
+    // Support single item deletion
     const { publicId, kind } = body;
 
     if (!publicId) {
