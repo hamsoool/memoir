@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import {
+  COOKIE_DEVICE_ID,
   COOKIE_SESSION_NAME,
   SESSION_TTL_SECONDS,
+  checkSecurityStatus,
+  recordFailedAttempt,
+  resetSecurityAttempts,
   saveDeviceSession,
 } from '@/lib/upstash';
 
@@ -21,6 +26,47 @@ function getClientIp(req: NextRequest): string {
 
 export async function POST(req: NextRequest) {
   try {
+    const cookieStore = cookies();
+    let deviceId = cookieStore.get(COOKIE_DEVICE_ID)?.value;
+    let isNewDevice = false;
+
+    if (!deviceId) {
+      deviceId = crypto.randomUUID();
+      isNewDevice = true;
+    }
+
+    const clientIp = getClientIp(req);
+
+    // 1. Check if IP or device is banned or timed out
+    const ipSec = await checkSecurityStatus(clientIp);
+    const devSec = await checkSecurityStatus(deviceId);
+
+    if (ipSec.banned || devSec.banned) {
+      return NextResponse.json(
+        {
+          ok: false,
+          banned: true,
+          error: 'Access permanently restricted after 20 unauthorized attempts.',
+        },
+        { status: 403 }
+      );
+    }
+
+    const activeTimeout = Math.max(ipSec.remainingSeconds, devSec.remainingSeconds);
+    if (activeTimeout > 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          timedOut: true,
+          remainingSeconds: activeTimeout,
+          error: `Too many incorrect attempts. Device is timed out. Try again in ${Math.ceil(
+            activeTimeout / 60
+          )} minutes.`,
+        },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json();
     const code = typeof body.code === 'string' ? body.code.trim() : '';
 
@@ -30,16 +76,74 @@ export async function POST(req: NextRequest) {
       ''
     ).trim();
 
-    // Verify code
+    // 2. Verify code
     if (expectedCode && code !== expectedCode) {
-      return NextResponse.json(
-        { ok: false, error: 'Incorrect passcode' },
+      const updatedIp = await recordFailedAttempt(clientIp);
+      const updatedDev = await recordFailedAttempt(deviceId);
+
+      const isBanned = updatedIp.banned || updatedDev.banned;
+      if (isBanned) {
+        return NextResponse.json(
+          {
+            ok: false,
+            banned: true,
+            error: 'Access permanently restricted after 20 unauthorized attempts.',
+          },
+          { status: 403 }
+        );
+      }
+
+      const remainingSeconds = Math.max(
+        updatedIp.remainingSeconds,
+        updatedDev.remainingSeconds
+      );
+      const totalAttempts = Math.max(updatedIp.attempts, updatedDev.attempts);
+
+      if (remainingSeconds > 0) {
+        return NextResponse.json(
+          {
+            ok: false,
+            timedOut: true,
+            attempts: totalAttempts,
+            remainingSeconds,
+            error: `Too many incorrect attempts. Device timed out for 5 minutes.`,
+          },
+          { status: 429 }
+        );
+      }
+
+      const attemptsLeft = Math.max(1, 5 - (totalAttempts % 5 || 5));
+      const response = NextResponse.json(
+        {
+          ok: false,
+          attempts: totalAttempts,
+          attemptsLeft,
+          error: `Incorrect passcode. ${attemptsLeft} attempt${
+            attemptsLeft === 1 ? '' : 's'
+          } remaining before a 5-minute timeout.`,
+        },
         { status: 401 }
       );
+
+      if (isNewDevice) {
+        response.cookies.set({
+          name: COOKIE_DEVICE_ID,
+          value: deviceId,
+          maxAge: 365 * 24 * 60 * 60,
+          httpOnly: true,
+          sameSite: 'lax',
+          path: '/',
+        });
+      }
+
+      return response;
     }
 
+    // 3. Reset security attempts on success
+    await resetSecurityAttempts(clientIp);
+    await resetSecurityAttempts(deviceId);
+
     const token = crypto.randomUUID();
-    const clientIp = getClientIp(req);
     const userAgent = req.headers.get('user-agent') || 'Unknown device';
     const expiresAt = new Date(
       Date.now() + SESSION_TTL_SECONDS * 1000
@@ -72,6 +176,17 @@ export async function POST(req: NextRequest) {
       secure: process.env.NODE_ENV === 'production',
       path: '/',
     });
+
+    if (isNewDevice) {
+      response.cookies.set({
+        name: COOKIE_DEVICE_ID,
+        value: deviceId,
+        maxAge: 365 * 24 * 60 * 60,
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+      });
+    }
 
     return response;
   } catch (err) {

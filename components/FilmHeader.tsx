@@ -11,7 +11,7 @@ export default function FilmHeader({
         <button
           type="button"
           onClick={onLock}
-          title="Lock the darkroom"
+          title="Lock memories"
           className="absolute right-0 top-0 font-stamp text-[11px] text-ink/40 hover:text-ink border border-line/60 hover:border-ink/40 px-2 py-1 rounded-xs transition flex items-center gap-1.5"
         >
           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">

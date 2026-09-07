@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import {
+  COOKIE_DEVICE_ID,
   COOKIE_SESSION_NAME,
+  checkSecurityStatus,
   getDeviceSession,
   getSessionByIp,
 } from '@/lib/upstash';
@@ -24,10 +26,28 @@ export async function GET(req: NextRequest) {
   try {
     const cookieStore = cookies();
     const token = cookieStore.get(COOKIE_SESSION_NAME)?.value;
+    const deviceId = cookieStore.get(COOKIE_DEVICE_ID)?.value || '';
     const clientIp = getClientIp(req);
 
+    // 0. Check if visitor's IP or device is banned or timed out
+    const ipSec = await checkSecurityStatus(clientIp);
+    const devSec = await checkSecurityStatus(deviceId);
+
+    if (ipSec.banned || devSec.banned) {
+      return NextResponse.json({
+        ok: true,
+        authenticated: false,
+        gateRequired: true,
+        banned: true,
+        error: 'Access permanently restricted after 20 unauthorized attempts.',
+      });
+    }
+
+    const remainingSeconds = Math.max(ipSec.remainingSeconds, devSec.remainingSeconds);
+    const timedOut = remainingSeconds > 0;
+
     // 1. Check if client has a valid 90-day device session token in cookie
-    if (token) {
+    if (token && !timedOut) {
       const session = await getDeviceSession(token);
       if (session) {
         return NextResponse.json({
@@ -44,7 +64,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. Check if client's IP is indexed in Upstash Redis as an authorized partner IP
-    if (clientIp && clientIp !== '127.0.0.1') {
+    if (clientIp && clientIp !== '127.0.0.1' && !timedOut) {
       const ipSession = await getSessionByIp(clientIp);
       if (ipSession) {
         return NextResponse.json({
@@ -68,6 +88,8 @@ export async function GET(req: NextRequest) {
       ok: true,
       authenticated: false,
       gateRequired,
+      timedOut,
+      remainingSeconds,
     });
   } catch (err) {
     console.error('Session check error:', err);

@@ -38,6 +38,8 @@ export default function Page() {
   const [isLoadingMedia, setIsLoadingMedia] = useState<boolean>(true);
   const [isConfigured, setIsConfigured] = useState<boolean>(true);
   const [confirmModal, setConfirmModal] = useState<ConfirmState | null>(null);
+  const [isBanned, setIsBanned] = useState<boolean>(false);
+  const [initialTimeoutSeconds, setInitialTimeoutSeconds] = useState<number>(0);
 
   // Tab, Sort, and Deck Layout states
   const [activeTab, setActiveTab] = useState<'reel' | 'trash'>('reel');
@@ -52,7 +54,19 @@ export default function Page() {
         const data = await res.json();
 
         if (data.ok) {
-          // If no passcode is set on server, open darkroom freely
+          // Check if device or IP is permanently banned
+          if (data.banned) {
+            setIsBanned(true);
+            setUnlocked(false);
+            return;
+          }
+
+          // Check if device is in a 5-minute cooldown
+          if (data.timedOut) {
+            setInitialTimeoutSeconds(data.remainingSeconds || 300);
+          }
+
+          // If no passcode is set on server, open memories freely
           if (!data.gateRequired) {
             setUnlocked(true);
             setIsDevelopingIntro(true);
@@ -317,7 +331,7 @@ export default function Page() {
 
     setConfirmModal({
       isOpen: true,
-      title: 'Empty darkroom trash?',
+      title: 'Empty discarded memories?',
       badge: `permanent purge • ${trashedCount} ${trashedCount === 1 ? 'item' : 'items'}`,
       description: `All ${trashedCount} discarded ${
         trashedCount === 1 ? 'memory' : 'memories'
@@ -461,11 +475,11 @@ export default function Page() {
   function handleLockRequest() {
     setConfirmModal({
       isOpen: true,
-      title: 'Lock the darkroom?',
+      title: 'Lock memories?',
       badge: 'security • lock reel',
       description:
-        'This will end your active session and require entering your passcode to return into the darkroom.',
-      confirmLabel: 'Lock Now',
+        'This will end your active session and require entering your passcode to view our memories again.',
+      confirmLabel: 'Lock Reel',
       cancelLabel: 'Keep Unlocked',
       isDestructive: false,
       onConfirm: async () => {
@@ -486,7 +500,13 @@ export default function Page() {
   }
 
   if (!unlocked) {
-    return <AccessGate onUnlock={handleUnlock} />;
+    return (
+      <AccessGate
+        onUnlock={handleUnlock}
+        initialBanned={isBanned}
+        initialTimeoutSeconds={initialTimeoutSeconds}
+      />
+    );
   }
 
   return (

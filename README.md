@@ -6,10 +6,10 @@ A private, vintage-styled photo and video journal dedicated to shared memories w
 
 ## Features
 
-- **Vintage Darkroom Aesthetic**: Polaroid-style photo prints, subtle tilts, washi tape styling, and film exposure counters powered by Fraunces & Special Elite typography.
+- **Vintage Film & Memory Reel**: Polaroid-style photo prints, subtle tilts, washi tape styling, and film exposure counters powered by Fraunces & Special Elite typography.
 - **Photo & Video Support**: Drag and drop images or videos on desktop, or tap the shutter button on mobile.
 - **Cloudinary Storage**: Secure cloud storage for all your photos and videos, keeping them organized in a dedicated folder.
-- **Passcode Gate**: Optional "Enter the darkroom" passcode screen (`NEXT_PUBLIC_ACCESS_CODE`) so the space remains intimate between the two of you.
+- **Passcode Gate**: Optional "Enter our memories" passcode screen (`ACCESS_CODE` or `NEXT_PUBLIC_ACCESS_CODE`) so the space remains intimate between the two of you.
 - **90-Day Device & IP Memory**: Backed by Upstash Redis, authorized devices and IP addresses are remembered for up to 90 days so you and your partner don't have to keep re-entering the passcode.
 - **Per-file Progress**: Real-time progress percentage bar during developing/uploading.
 

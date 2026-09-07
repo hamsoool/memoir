@@ -12,7 +12,7 @@ const REPEATING_MARKS = [
   '▲ 25',
   'ISO 400',
   '▲ 25A',
-  'DARKROOM',
+  'MEMORIES',
   '▲ 26',
   '35MM FILM',
   '▲ 26A',

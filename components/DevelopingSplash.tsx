@@ -65,11 +65,11 @@ export default function DevelopingSplash({
         <span className="absolute -top-3 left-8 w-12 h-5 bg-tape/80 rotate-[-5deg] shadow-xs pointer-events-none" />
         <span className="absolute -bottom-3 right-8 w-12 h-5 bg-tape/80 rotate-[4deg] shadow-xs pointer-events-none" />
 
-        {/* Small stamped darkroom header */}
+        {/* Small stamped memories header */}
         <div className="flex items-center gap-2 mb-6">
           <span className="w-2 h-2 rounded-full bg-rust animate-pulse" />
           <p className="font-stamp text-[11px] text-ink/50 uppercase tracking-widest">
-            Darkroom Development
+            Developing Memories
           </p>
         </div>
 
@@ -95,13 +95,13 @@ export default function DevelopingSplash({
           />
         </div>
 
-        {/* Dynamic Darkroom Status Log */}
+        {/* Dynamic Memory Status Log */}
         <div className="mt-6 space-y-1.5 min-h-[3rem]">
           <p className="font-stamp text-xs text-ink/75 transition-all duration-300">
             {phase === 'exposing' && 'submerging negative in developer bath…'}
             {phase === 'developing' && 'silver halide reacting • image forming…'}
             {phase === 'fixing' && 'rinsing in fixer • stabilizing our reel…'}
-            {phase === 'ready' && 'print fully developed • opening darkroom…'}
+            {phase === 'ready' && 'print fully developed • opening our memories…'}
           </p>
 
           <p className="font-stamp text-[10px] text-ink/40">
