@@ -11,6 +11,7 @@ import DevelopingSplash from '@/components/DevelopingSplash';
 import { uploadFile } from '@/lib/uploadClient';
 import { fileKind, formatBytes, groupMemories, makeId } from '@/lib/format';
 import type { UploadItem } from '@/lib/types';
+import type { DiscordNotifyOptions } from '@/lib/discord';
 
 type SortField = 'date' | 'size' | 'type';
 type SortOrder = 'desc' | 'asc';
@@ -144,7 +145,7 @@ export default function Page() {
   }, [unlocked, loadMediaFromCloudinary]);
 
   const startUpload = useCallback(
-    async (item: UploadItem) => {
+    async (item: UploadItem): Promise<DiscordNotifyOptions | null> => {
       setItems((prev) =>
         prev.map((i) =>
           i.id === item.id
@@ -237,14 +238,7 @@ export default function Page() {
     // Upload all files and collect results
     const results = await Promise.all(toUpload.map((item) => startUpload(item)));
     const successful = results.filter(
-      (
-        r
-      ): r is {
-        filename: string;
-        url: string;
-        kind: 'image' | 'video';
-        publicId?: string;
-      } => r !== null && Boolean(r.url)
+      (r): r is DiscordNotifyOptions => r !== null && Boolean(r.url)
     );
 
     // Send a single combined Discord message for all uploaded attachments
