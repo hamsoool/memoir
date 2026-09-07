@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { UploadItem } from '@/lib/types';
-import type { MemoryDeckGroup } from '@/lib/format';
+import { formatBytes, type MemoryDeckGroup } from '@/lib/format';
 import PhotoPrint from './PhotoPrint';
 
 interface MemoryDeckProps {
@@ -14,7 +14,11 @@ interface MemoryDeckProps {
   isTrashView?: boolean;
   isSelectMode?: boolean;
   selectedIds?: Set<string>;
+  selectedBytes?: number;
   onToggleSelect?: (id: string) => void;
+  onToggleSelectAll?: () => void;
+  onToggleSelectMode?: () => void;
+  onEnlarge?: (item: UploadItem) => void;
 }
 
 export default function MemoryDeck({
@@ -26,7 +30,11 @@ export default function MemoryDeck({
   isTrashView = false,
   isSelectMode = false,
   selectedIds,
+  selectedBytes = 0,
   onToggleSelect,
+  onToggleSelectAll,
+  onToggleSelectMode,
+  onEnlarge,
 }: MemoryDeckProps) {
   const [isSpread, setIsSpread] = useState(false);
   const items = group.items;
@@ -36,9 +44,27 @@ export default function MemoryDeck({
   if (items.length === 1) {
     return (
       <div className="flex flex-col w-full max-w-[240px] sm:max-w-[250px] mx-auto sm:mx-0">
-        <div className="mb-2 flex items-baseline justify-between font-stamp text-xs text-ink/60 px-1">
+        <div className="mb-2 flex items-baseline justify-between font-stamp text-xs text-ink/60 px-1 gap-2 flex-wrap">
           <span className="font-display italic text-sm sm:text-base text-ink">{group.title}</span>
-          <span className="text-[11px]">1 memory</span>
+          {isTrashView ? (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => onToggleSelect?.(items[0].id)}
+                className="font-stamp text-[11px] text-ink/75 hover:text-ink px-2 py-0.5 rounded-xs border border-line bg-paper-light hover:border-ink/40 transition flex items-center gap-1 shadow-xs active:scale-[0.98]"
+              >
+                <svg className="w-3 h-3 text-ink/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  {selectedIds?.has(items[0].id) && (
+                    <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+                  )}
+                </svg>
+                <span>{selectedIds?.has(items[0].id) ? 'Deselect' : 'Select'}</span>
+              </button>
+            </div>
+          ) : (
+            <span className="text-[11px]">1 memory</span>
+          )}
         </div>
         <PhotoPrint
           item={items[0]}
@@ -51,6 +77,7 @@ export default function MemoryDeck({
           isSelectMode={isSelectMode}
           isSelected={Boolean(selectedIds?.has(items[0].id))}
           onToggleSelect={onToggleSelect}
+          onEnlarge={onEnlarge}
         />
       </div>
     );
@@ -65,7 +92,7 @@ export default function MemoryDeck({
       }`}
     >
       {/* Header of the deck */}
-      <div className="mb-2 flex items-baseline justify-between px-1">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2 px-1">
         <div>
           <h3 className="font-display italic text-sm sm:text-base text-ink font-medium">
             {group.title}
@@ -75,51 +102,93 @@ export default function MemoryDeck({
           </p>
         </div>
 
-        {/* Tactile Toggle to Spread or Stack Deck */}
-        <button
-          type="button"
-          onClick={() => setIsSpread((prev) => !prev)}
-          className="font-stamp text-xs text-ink/75 hover:text-ink px-2.5 py-1 rounded-xs border border-line bg-paper-light hover:border-ink/40 transition flex items-center gap-1.5 shadow-xs"
-        >
-          {isSpread ? (
-            <>
-              {/* Stack Icon */}
-              <svg
-                className="w-3.5 h-3.5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+        {/* Controls near the archived photos: Select & Stack/Spread */}
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
+          {isTrashView && (
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const allSelected = items.length > 0 && items.every((i) => selectedIds?.has(i.id));
+                  if (allSelected) {
+                    items.forEach((item) => {
+                      if (selectedIds?.has(item.id)) onToggleSelect?.(item.id);
+                    });
+                  } else {
+                    items.forEach((item) => {
+                      if (!selectedIds?.has(item.id)) onToggleSelect?.(item.id);
+                    });
+                  }
+                }}
+                className="font-stamp text-xs text-ink/75 hover:text-ink px-2.5 py-1 rounded-xs border border-line bg-paper-light hover:border-ink/40 transition flex items-center gap-1.5 shadow-xs active:scale-[0.98]"
               >
-                <polygon points="12 2 2 7 12 12 22 7 12 2" />
-                <polyline points="2 17 12 22 22 17" />
-                <polyline points="2 12 12 17 22 12" />
-              </svg>
-              <span>Stack cards</span>
-            </>
-          ) : (
-            <>
-              {/* Spread / Fan Icon */}
-              <svg
-                className="w-3.5 h-3.5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="3" y="3" width="7" height="7" />
-                <rect x="14" y="3" width="7" height="7" />
-                <rect x="14" y="14" width="7" height="7" />
-                <rect x="3" y="14" width="7" height="7" />
-              </svg>
-              <span>Spread deck ({items.length})</span>
-            </>
+                <svg
+                  className="w-3.5 h-3.5 text-ink/60"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  {items.length > 0 && items.every((i) => selectedIds?.has(i.id)) && (
+                    <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+                  )}
+                </svg>
+                <span>
+                  {items.length > 0 && items.every((i) => selectedIds?.has(i.id))
+                    ? 'Deselect All'
+                    : 'Select All'}
+                </span>
+              </button>
+            </div>
           )}
-        </button>
+
+          {/* Tactile Toggle to Spread or Stack Deck */}
+          <button
+            type="button"
+            onClick={() => setIsSpread((prev) => !prev)}
+            className="font-stamp text-xs text-ink/75 hover:text-ink px-2.5 py-1 rounded-xs border border-line bg-paper-light hover:border-ink/40 transition flex items-center gap-1.5 shadow-xs"
+          >
+            {isSpread ? (
+              <>
+                {/* Stack Icon */}
+                <svg
+                  className="w-3.5 h-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                  <polyline points="2 17 12 22 22 17" />
+                  <polyline points="2 12 12 17 22 12" />
+                </svg>
+                <span>Stack cards</span>
+              </>
+            ) : (
+              <>
+                {/* Spread / Fan Icon */}
+                <svg
+                  className="w-3.5 h-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="3" width="7" height="7" />
+                  <rect x="14" y="3" width="7" height="7" />
+                  <rect x="14" y="14" width="7" height="7" />
+                  <rect x="3" y="14" width="7" height="7" />
+                </svg>
+                <span>Spread deck ({items.length})</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* When Stacked (Card Deck View) */}
@@ -154,6 +223,7 @@ export default function MemoryDeck({
               isSelectMode={isSelectMode}
               isSelected={Boolean(selectedIds?.has(topItem.id))}
               onToggleSelect={onToggleSelect}
+              onEnlarge={isExpanded ? onEnlarge : undefined}
             />
 
             {/* Click-to-spread invitation overlay tag */}
@@ -193,6 +263,7 @@ export default function MemoryDeck({
               isSelectMode={isSelectMode}
               isSelected={Boolean(selectedIds?.has(item.id))}
               onToggleSelect={onToggleSelect}
+              onEnlarge={onEnlarge}
             />
           ))}
         </div>

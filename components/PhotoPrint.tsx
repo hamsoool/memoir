@@ -23,6 +23,7 @@ export default function PhotoPrint({
   isSelectMode = false,
   isSelected = false,
   onToggleSelect,
+  onEnlarge,
 }: {
   item: UploadItem;
   index: number;
@@ -34,6 +35,7 @@ export default function PhotoPrint({
   isSelectMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: (id: string) => void;
+  onEnlarge?: (item: UploadItem) => void;
 }) {
   const rotation = ROTATIONS[index % ROTATIONS.length];
   const displayName = item.file?.name || item.name || 'Memory';
@@ -122,14 +124,27 @@ export default function PhotoPrint({
         </button>
       )}
 
-      {/* Media container */}
-      <div className="relative bg-ink/5 aspect-square overflow-hidden rounded-xs">
+      {/* Media container: click to enlarge */}
+      <div
+        onClick={(e) => {
+          if (isSelectMode && onToggleSelect) {
+            return;
+          }
+          if (mediaSrc && onEnlarge) {
+            e.stopPropagation();
+            onEnlarge(item);
+          }
+        }}
+        className={`relative bg-ink/5 aspect-square overflow-hidden rounded-xs ${
+          !isSelectMode && mediaSrc ? 'cursor-zoom-in group' : ''
+        }`}
+      >
         {item.kind === 'image' ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={mediaSrc}
             alt=""
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
             draggable={false}
           />
         ) : (
@@ -138,8 +153,21 @@ export default function PhotoPrint({
             className="w-full h-full object-cover"
             muted
             playsInline
-            controls
           />
+        )}
+
+        {/* Hover zoom indicator overlay */}
+        {!isSelectMode && mediaSrc && (
+          <div className="absolute inset-0 bg-ink/0 group-hover:bg-ink/15 transition-all duration-200 flex items-center justify-center pointer-events-none">
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1.5 rounded-full bg-paper-light/90 text-ink shadow-xs transform scale-90 group-hover:scale-100">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                <line x1="11" y1="8" x2="11" y2="14" />
+                <line x1="8" y1="11" x2="14" y2="11" />
+              </svg>
+            </span>
+          </div>
         )}
 
         {item.status === 'uploading' && (
@@ -219,16 +247,6 @@ export default function PhotoPrint({
             {item.status === 'done' && (
               <span className="text-teal flex items-center justify-between">
                 <span>developed</span>
-                {item.url && (
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[10px] underline underline-offset-2 opacity-80 hover:opacity-100 font-sans"
-                  >
-                    view
-                  </a>
-                )}
               </span>
             )}
             {item.status === 'error' && (

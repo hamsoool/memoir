@@ -7,6 +7,7 @@ import UploadGrid from '@/components/UploadGrid';
 import AccessGate, { isAlreadyUnlocked } from '@/components/AccessGate';
 import ConfirmUploadModal from '@/components/ConfirmUploadModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import PhotoLightbox from '@/components/PhotoLightbox';
 import DevelopingSplash from '@/components/DevelopingSplash';
 import { uploadFile } from '@/lib/uploadClient';
 import { fileKind, formatBytes, groupMemories, makeId } from '@/lib/format';
@@ -48,15 +49,20 @@ export default function Page() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [isDeckMode, setIsDeckMode] = useState<boolean>(false);
 
-  // Trash Multi-Selection states
-  const [isSelectingTrash, setIsSelectingTrash] = useState<boolean>(false);
+  // Trash Multi-Selection states - default to true when in trash
+  const [isSelectingTrash, setIsSelectingTrash] = useState<boolean>(true);
   const [selectedTrashIds, setSelectedTrashIds] = useState<Set<string>>(new Set());
 
-  // Reset selection when leaving trash tab
+  // Click-to-enlarge Photo Lightbox state
+  const [enlargedItem, setEnlargedItem] = useState<UploadItem | null>(null);
+
+  // Reset selection when leaving trash tab, and automatically enable select mode when entering trash
   useEffect(() => {
     if (activeTab !== 'trash') {
       setIsSelectingTrash(false);
       setSelectedTrashIds(new Set());
+    } else {
+      setIsSelectingTrash(true);
     }
   }, [activeTab]);
 
@@ -450,7 +456,6 @@ export default function Page() {
         // Optimistically remove from state
         setItems((prev) => prev.filter((i) => !selectedTrashIds.has(i.id)));
         setSelectedTrashIds(new Set());
-        setIsSelectingTrash(false);
 
         try {
           await Promise.all(
@@ -481,7 +486,6 @@ export default function Page() {
       prev.map((i) => (selectedTrashIds.has(i.id) ? { ...i, isTrashed: false } : i))
     );
     setSelectedTrashIds(new Set());
-    setIsSelectingTrash(false);
 
     try {
       await Promise.all(
@@ -561,6 +565,25 @@ export default function Page() {
     [items]
   );
 
+  // Dynamic storage reduction calculation for selected trash items
+  const selectedTrashBytes = useMemo(() => {
+    return trashedItems
+      .filter((i) => selectedTrashIds.has(i.id))
+      .reduce((acc, curr) => acc + (curr.bytes || curr.file?.size || 0), 0);
+  }, [trashedItems, selectedTrashIds]);
+
+  const selectedImageBytes = useMemo(() => {
+    return trashedItems
+      .filter((i) => selectedTrashIds.has(i.id) && i.kind === 'image')
+      .reduce((acc, curr) => acc + (curr.bytes || curr.file?.size || 0), 0);
+  }, [trashedItems, selectedTrashIds]);
+
+  const selectedVideoBytes = useMemo(() => {
+    return trashedItems
+      .filter((i) => selectedTrashIds.has(i.id) && i.kind === 'video')
+      .reduce((acc, curr) => acc + (curr.bytes || curr.file?.size || 0), 0);
+  }, [trashedItems, selectedTrashIds]);
+
   // Sorting logic based on field and direction
   const sortedItems = useMemo(() => {
     const source = activeTab === 'reel' ? [...activeItems] : [...trashedItems];
@@ -628,23 +651,35 @@ export default function Page() {
 
   const totalUploadedBytes = totalImageBytes + totalVideoBytes;
 
+  // Real-time capacity reductions when trash items are selected
+  const hasReduction = activeTab === 'trash' && selectedTrashBytes > 0;
+  const effectiveUploadedBytes = hasReduction
+    ? Math.max(0, totalUploadedBytes - selectedTrashBytes)
+    : totalUploadedBytes;
+  const effectiveImageBytes = hasReduction
+    ? Math.max(0, totalImageBytes - selectedImageBytes)
+    : totalImageBytes;
+  const effectiveVideoBytes = hasReduction
+    ? Math.max(0, totalVideoBytes - selectedVideoBytes)
+    : totalVideoBytes;
+
   // 25 GB Cloudinary free capacity in bytes
   const MAX_STORAGE_BYTES = 25 * 1024 * 1024 * 1024;
-  const imagePercentage = (totalImageBytes / MAX_STORAGE_BYTES) * 100;
-  const videoPercentage = (totalVideoBytes / MAX_STORAGE_BYTES) * 100;
+  const imagePercentage = (effectiveImageBytes / MAX_STORAGE_BYTES) * 100;
+  const videoPercentage = (effectiveVideoBytes / MAX_STORAGE_BYTES) * 100;
   const usedPercentage = Math.min(100, imagePercentage + videoPercentage);
 
   // Minimum visibility threshold so tiny uploads remain visible on the bar
   const displayImagePercent =
-    totalImageBytes > 0 ? Math.max(0.6, imagePercentage) : 0;
+    effectiveImageBytes > 0 ? Math.max(0.6, imagePercentage) : 0;
   const displayVideoPercent =
-    totalVideoBytes > 0 ? Math.max(0.6, videoPercentage) : 0;
+    effectiveVideoBytes > 0 ? Math.max(0.6, videoPercentage) : 0;
 
   const usedPercentageLabel =
-    usedPercentage < 0.01 && totalUploadedBytes > 0
+    usedPercentage < 0.01 && effectiveUploadedBytes > 0
       ? '< 0.01%'
       : `${usedPercentage.toFixed(2)}%`;
-  const remainingBytes = Math.max(0, MAX_STORAGE_BYTES - totalUploadedBytes);
+  const remainingBytes = Math.max(0, MAX_STORAGE_BYTES - effectiveUploadedBytes);
 
   function handleUnlock() {
     setUnlocked(true);
@@ -743,6 +778,14 @@ export default function Page() {
         />
       )}
 
+      {/* Click-to-enlarge Photo Lightbox Modal */}
+      <PhotoLightbox
+        item={enlargedItem}
+        items={sortedItems}
+        onClose={() => setEnlargedItem(null)}
+        onNavigate={(nextItem) => setEnlargedItem(nextItem)}
+      />
+
       <section>
         {/* View Switcher & Sorting Controls Bar */}
         <div className="mb-5 p-1.5 sm:p-2 bg-paper border border-line rounded-sm flex flex-col md:flex-row md:items-center justify-between gap-1.5 sm:gap-2">
@@ -807,91 +850,29 @@ export default function Page() {
               </button>
             </div>
 
-            {/* Layout Toggle: Decks vs Spread and Trash Selection Controls */}
+            {/* Layout Toggle: Decks vs Spread and Trash Empty button */}
             <div className="flex items-center gap-1.5">
               {activeTab === 'trash' && trashedItems.length > 0 && (
-                <div className="flex items-center gap-1 sm:gap-1.5">
-                  {!isSelectingTrash ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setIsSelectingTrash(true)}
-                        className="font-stamp text-[11px] text-ink/75 hover:text-ink hover:bg-ink/5 border border-line bg-paper-light px-2 py-1 rounded-xs transition flex items-center gap-1"
-                        title="Select multiple memories to permanently delete"
-                      >
-                        <svg
-                          className="w-3 h-3 text-ink/60"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <rect x="3" y="3" width="18" height="18" rx="2" />
-                          <path d="M9 12l2 2 4-4" />
-                        </svg>
-                        <span>Select</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleEmptyTrash}
-                        className="font-stamp text-[11px] text-rust hover:bg-rust/10 border border-rust/40 px-2 py-1 rounded-xs transition flex items-center gap-1"
-                        title="Empty all memories in trash"
-                      >
-                        <svg
-                          className="w-3 h-3"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        </svg>
-                        <span>Empty All</span>
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={handleToggleSelectAllTrash}
-                        className="font-stamp text-[11px] text-ink hover:bg-ink/5 border border-ink/40 bg-paper-light px-2 py-1 rounded-xs transition flex items-center gap-1 font-medium"
-                      >
-                        <svg
-                          className="w-3 h-3"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <rect x="3" y="3" width="18" height="18" rx="2" />
-                          {selectedTrashIds.size === trashedItems.length && trashedItems.length > 0 && (
-                            <path d="M9 12l2 2 4-4" />
-                          )}
-                        </svg>
-                        <span>
-                          {selectedTrashIds.size === trashedItems.length
-                            ? 'Deselect All'
-                            : 'Select All'}
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsSelectingTrash(false);
-                          setSelectedTrashIds(new Set());
-                        }}
-                        className="font-stamp text-[11px] text-ink/70 hover:text-ink px-1.5 py-1 transition"
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={handleEmptyTrash}
+                  className="font-stamp text-[11px] text-rust hover:bg-rust/10 border border-rust/40 px-2.5 py-1 rounded-xs transition flex items-center gap-1"
+                  title="Empty all memories in trash"
+                >
+                  <svg
+                    className="w-3 h-3"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                  <span>Empty All</span>
+                </button>
               )}
 
               <div className="inline-flex rounded-xs border border-line bg-paper-light p-0.5 font-stamp text-xs">
@@ -1110,7 +1091,11 @@ export default function Page() {
           isTrashView={activeTab === 'trash'}
           isSelectMode={activeTab === 'trash' && isSelectingTrash}
           selectedIds={selectedTrashIds}
+          selectedBytes={selectedTrashBytes}
           onToggleSelect={handleToggleSelectTrashItem}
+          onToggleSelectAll={handleToggleSelectAllTrash}
+          onToggleSelectMode={() => setIsSelectingTrash((prev) => !prev)}
+          onEnlarge={setEnlargedItem}
           emptyMessage={
             activeTab === 'trash'
               ? 'Trash is empty'
@@ -1124,11 +1109,13 @@ export default function Page() {
         />
 
         {/* Mobile-First Floating Action Bar for Trash Multi-Select */}
-        {activeTab === 'trash' && isSelectingTrash && (
-          <div className="fixed bottom-4 sm:bottom-6 inset-x-0 z-40 flex justify-center px-3 sm:px-4 pointer-events-none animate-fade-in">
-            <div className="bg-paper-light/95 backdrop-blur-md border border-line shadow-print rounded-full px-3.5 sm:px-5 py-2 sm:py-2.5 flex items-center justify-between gap-3 pointer-events-auto w-full max-w-sm sm:max-w-md">
-              <div className="font-stamp text-[11px] sm:text-xs text-ink/80 font-medium whitespace-nowrap pl-1">
-                {selectedTrashIds.size} of {trashedItems.length} selected
+        {activeTab === 'trash' && isSelectingTrash && selectedTrashIds.size > 0 && (
+          <div className="fixed bottom-4 sm:bottom-6 inset-x-0 z-40 flex justify-center px-3 sm:px-4 pointer-events-none animate-slide-up">
+            <div className="bg-paper-light/95 backdrop-blur-md border border-line shadow-print rounded-full px-3.5 sm:px-5 py-2 sm:py-2.5 flex items-center justify-between gap-2.5 sm:gap-3 pointer-events-auto w-full max-w-md">
+              <div className="flex items-center gap-1.5 sm:gap-2 font-stamp text-[11px] sm:text-xs">
+                <span className="text-ink/80 font-medium whitespace-nowrap">
+                  {selectedTrashIds.size} of {trashedItems.length}
+                </span>
               </div>
 
               <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
@@ -1157,7 +1144,7 @@ export default function Page() {
                   type="button"
                   onClick={handleDeleteSelected}
                   disabled={selectedTrashIds.size === 0}
-                  className="font-stamp text-[11px] sm:text-xs px-3 sm:px-3.5 py-1.5 rounded-full bg-rust hover:bg-rust-dark text-paper-light transition shadow-xs disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1 font-medium"
+                  className="font-stamp text-[11px] sm:text-xs px-3 sm:px-3.5 py-1.5 rounded-full bg-rust hover:bg-rust-dark text-paper-light transition shadow-xs disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1 font-medium active:scale-[0.98]"
                 >
                   <svg
                     className="w-3 h-3"
@@ -1171,7 +1158,10 @@ export default function Page() {
                     <polyline points="3 6 5 6 21 6" />
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                   </svg>
-                  <span>Delete Forever {selectedTrashIds.size > 0 ? `(${selectedTrashIds.size})` : ''}</span>
+                  <span>
+                    Delete Forever
+                    {selectedTrashBytes > 0 ? ` (-${formatBytes(selectedTrashBytes)})` : ''}
+                  </span>
                 </button>
               </div>
             </div>
@@ -1192,9 +1182,29 @@ export default function Page() {
                   </span>
                 )}
               </div>
-              <h2 className="font-display italic text-xl sm:text-2xl text-ink mt-0.5">
-                {formatBytes(totalUploadedBytes)} of 25 GB used
-              </h2>
+              <div className="flex items-baseline gap-2.5 flex-wrap mt-0.5">
+                <h2 className="font-display italic text-xl sm:text-2xl text-ink">
+                  {hasReduction ? (
+                    <>
+                      <span className="line-through text-ink/35 text-base sm:text-lg mr-2 font-normal">
+                        {formatBytes(totalUploadedBytes)}
+                      </span>
+                      <span className="text-rust font-bold">
+                        {formatBytes(effectiveUploadedBytes)}
+                      </span>
+                    </>
+                  ) : (
+                    <span>{formatBytes(totalUploadedBytes)}</span>
+                  )}{' '}
+                  of 25 GB used
+                </h2>
+                {hasReduction && (
+                  <span className="font-stamp text-[10px] sm:text-[11px] text-rust bg-rust/10 border border-rust/30 px-2.5 py-0.5 rounded-full transition-all duration-300 animate-fade-in flex items-center gap-1.5 font-medium shadow-2xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rust animate-pulse" />
+                    <span>-{formatBytes(selectedTrashBytes)} permanently</span>
+                  </span>
+                )}
+              </div>
             </div>
             <div className="font-stamp text-[11px] sm:text-xs text-ink/60 flex items-center gap-2.5">
               <span>{activeItems.length} {activeItems.length === 1 ? 'moment' : 'moments'} preserved</span>
@@ -1216,7 +1226,15 @@ export default function Page() {
                   <span className="w-2 h-2 rounded-full bg-rust shrink-0" />
                   <span className="text-ink font-medium">Photos:</span>
                   <span className="text-ink/65">
-                    {formatBytes(totalImageBytes)} ({imageItems.length})
+                    {hasReduction && selectedImageBytes > 0 ? (
+                      <>
+                        <span className="line-through text-ink/35 mr-1">{formatBytes(totalImageBytes)}</span>
+                        <span className="text-rust font-medium">{formatBytes(effectiveImageBytes)}</span>
+                      </>
+                    ) : (
+                      formatBytes(totalImageBytes)
+                    )}{' '}
+                    ({imageItems.length - (hasReduction ? trashedItems.filter((i) => selectedTrashIds.has(i.id) && i.kind === 'image').length : 0)})
                   </span>
                 </span>
 
@@ -1225,13 +1243,29 @@ export default function Page() {
                   <span className="w-2 h-2 rounded-full bg-teal shrink-0" />
                   <span className="text-ink font-medium">Videos:</span>
                   <span className="text-ink/65">
-                    {formatBytes(totalVideoBytes)} ({videoItems.length})
+                    {hasReduction && selectedVideoBytes > 0 ? (
+                      <>
+                        <span className="line-through text-ink/35 mr-1">{formatBytes(totalVideoBytes)}</span>
+                        <span className="text-teal font-medium">{formatBytes(effectiveVideoBytes)}</span>
+                      </>
+                    ) : (
+                      formatBytes(totalVideoBytes)
+                    )}{' '}
+                    ({videoItems.length - (hasReduction ? trashedItems.filter((i) => selectedTrashIds.has(i.id) && i.kind === 'video').length : 0)})
                   </span>
                 </span>
               </div>
 
               <span className="font-medium text-ink/80">
-                {formatBytes(totalUploadedBytes)} / 25 GB ({usedPercentageLabel})
+                {hasReduction ? (
+                  <>
+                    <span className="line-through text-ink/35 mr-1 font-normal">{formatBytes(totalUploadedBytes)}</span>
+                    <span className="text-rust font-bold">{formatBytes(effectiveUploadedBytes)}</span>
+                  </>
+                ) : (
+                  formatBytes(totalUploadedBytes)
+                )}{' '}
+                / 25 GB ({usedPercentageLabel})
               </span>
             </div>
 
@@ -1247,9 +1281,9 @@ export default function Page() {
               />
 
               {/* Photos segment (Rust) */}
-              {totalImageBytes > 0 && (
+              {effectiveImageBytes > 0 && (
                 <div
-                  title={`Photos: ${formatBytes(totalImageBytes)} (${imageItems.length} photos)`}
+                  title={`Photos: ${formatBytes(effectiveImageBytes)}`}
                   className="h-full bg-rust transition-all duration-700 relative shadow-xs rounded-l-[1px]"
                   style={{ width: `${displayImagePercent}%` }}
                 >
@@ -1258,11 +1292,11 @@ export default function Page() {
               )}
 
               {/* Videos segment (Teal) */}
-              {totalVideoBytes > 0 && (
+              {effectiveVideoBytes > 0 && (
                 <div
-                  title={`Videos: ${formatBytes(totalVideoBytes)} (${videoItems.length} videos)`}
+                  title={`Videos: ${formatBytes(effectiveVideoBytes)}`}
                   className={`h-full bg-teal transition-all duration-700 relative shadow-xs ${
-                    totalImageBytes === 0 ? 'rounded-l-[1px]' : ''
+                    effectiveImageBytes === 0 ? 'rounded-l-[1px]' : ''
                   } rounded-r-[1px]`}
                   style={{ width: `${displayVideoPercent}%` }}
                 >
@@ -1285,6 +1319,11 @@ export default function Page() {
           <div className="mt-2.5 pt-2 border-t border-line/40 flex flex-wrap items-center justify-between gap-2 text-xs font-stamp text-ink/75">
             <span className="text-ink/65 text-[10px] sm:text-[11px]">
               {formatBytes(remainingBytes)} of room still open on our roll
+              {hasReduction && (
+                <span className="text-rust ml-1.5 font-medium">
+                  (+{formatBytes(selectedTrashBytes)} freed)
+                </span>
+              )}
             </span>
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] text-ink/60">
               <span className="px-2 py-0.5 bg-paper rounded-xs border border-line/60">

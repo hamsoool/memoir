@@ -1,7 +1,7 @@
 'use client';
 
 import type { UploadItem } from '@/lib/types';
-import type { MemoryDeckGroup } from '@/lib/format';
+import { formatBytes, type MemoryDeckGroup } from '@/lib/format';
 import PhotoPrint from './PhotoPrint';
 import MemoryDeck from './MemoryDeck';
 
@@ -16,7 +16,11 @@ export default function UploadGrid({
   isTrashView = false,
   isSelectMode = false,
   selectedIds,
+  selectedBytes = 0,
   onToggleSelect,
+  onToggleSelectAll,
+  onToggleSelectMode,
+  onEnlarge,
   emptyMessage = 'Nothing developed yet',
   emptySubMessage = 'Add your first shot above.',
 }: {
@@ -30,7 +34,11 @@ export default function UploadGrid({
   isTrashView?: boolean;
   isSelectMode?: boolean;
   selectedIds?: Set<string>;
+  selectedBytes?: number;
   onToggleSelect?: (id: string) => void;
+  onToggleSelectAll?: () => void;
+  onToggleSelectMode?: () => void;
+  onEnlarge?: (item: UploadItem) => void;
   emptyMessage?: string;
   emptySubMessage?: string;
 }) {
@@ -58,7 +66,11 @@ export default function UploadGrid({
             isTrashView={isTrashView}
             isSelectMode={isSelectMode}
             selectedIds={selectedIds}
+            selectedBytes={selectedBytes}
             onToggleSelect={onToggleSelect}
+            onToggleSelectAll={onToggleSelectAll}
+            onToggleSelectMode={onToggleSelectMode}
+            onEnlarge={onEnlarge}
           />
         ))}
       </div>
@@ -67,22 +79,67 @@ export default function UploadGrid({
 
   // Standard flat grid view
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-3.5 sm:gap-x-5 gap-y-5 sm:gap-y-6">
-      {items.map((item, i) => (
-        <PhotoPrint
-          key={item.id}
-          item={item}
-          index={i}
-          onRemove={onRemove}
-          onRetry={onRetry}
-          onTrash={onTrash}
-          onRestore={onRestore}
-          isTrashView={isTrashView}
-          isSelectMode={isSelectMode}
-          isSelected={Boolean(selectedIds?.has(item.id))}
-          onToggleSelect={onToggleSelect}
-        />
-      ))}
+    <div className="flex flex-col">
+      {/* Header directly above the archived photos when in flat grid view */}
+      {isTrashView && (
+        <div className="mb-3.5 flex flex-wrap items-baseline justify-between gap-2 px-1">
+          <div>
+            <h3 className="font-display italic text-sm sm:text-base text-ink font-medium">
+              Archived Memories
+            </h3>
+            <p className="font-stamp text-[10px] sm:text-[11px] text-ink/50 mt-0.5">
+              {items.length} {items.length === 1 ? 'memory' : 'memories'} in trash
+            </p>
+          </div>
+
+          {onToggleSelectAll && (
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                onClick={onToggleSelectAll}
+                className="font-stamp text-xs text-ink hover:text-ink/80 px-2.5 py-1 rounded-xs border border-line bg-paper-light hover:border-ink/40 transition flex items-center gap-1.5 shadow-xs active:scale-[0.98]"
+              >
+                <svg
+                  className="w-3.5 h-3.5 text-ink/60"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  {selectedIds && selectedIds.size === items.length && items.length > 0 && (
+                    <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+                  )}
+                </svg>
+                <span>
+                  {selectedIds && selectedIds.size === items.length && items.length > 0
+                    ? 'Deselect All'
+                    : 'Select All'}
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-3.5 sm:gap-x-5 gap-y-5 sm:gap-y-6">
+        {items.map((item, i) => (
+          <PhotoPrint
+            key={item.id}
+            item={item}
+            index={i}
+            onRemove={onRemove}
+            onRetry={onRetry}
+            onTrash={onTrash}
+            onRestore={onRestore}
+            isTrashView={isTrashView}
+            isSelectMode={isSelectMode}
+            isSelected={Boolean(selectedIds?.has(item.id))}
+            onToggleSelect={onToggleSelect}
+            onEnlarge={onEnlarge}
+          />
+        ))}
+      </div>
     </div>
   );
 }
