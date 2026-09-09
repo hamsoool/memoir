@@ -12,6 +12,7 @@ import PhotoStripStudio from '@/components/PhotoStripStudio';
 import DevelopingSplash from '@/components/DevelopingSplash';
 import { uploadFile } from '@/lib/uploadClient';
 import { fileKind, formatBytes, groupMemories, makeId } from '@/lib/format';
+import { usePinchGrid } from '@/lib/usePinchGrid';
 import type { UploadItem } from '@/lib/types';
 import type { DiscordNotifyOptions } from '@/lib/discord';
 
@@ -33,6 +34,7 @@ interface ConfirmState {
 }
 
 export default function Page() {
+  const { columns, cycleColumns, toastMessage, containerRef } = usePinchGrid();
   const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
   const [unlocked, setUnlocked] = useState<boolean>(false);
   const [isDevelopingIntro, setIsDevelopingIntro] = useState<boolean>(false);
@@ -1118,6 +1120,28 @@ export default function Page() {
                   <span>Spread</span>
                 </button>
               </div>
+
+              {/* Mobile & Desktop Column Density Button (Tap or Pinch) */}
+              <button
+                type="button"
+                onClick={cycleColumns}
+                title={`Showing ${columns} photos per row. Tap or pinch on mobile to change.`}
+                className="px-2 sm:px-2.5 py-1 rounded-xs border border-line bg-paper-light hover:border-ink/40 text-ink/80 hover:text-ink font-stamp text-xs transition flex items-center gap-1.5 shadow-xs active:scale-95 shrink-0"
+              >
+                <svg
+                  className="w-3.5 h-3.5 text-rust"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <rect x="3" y="3" width="7" height="7" />
+                  <rect x="14" y="3" width="7" height="7" />
+                  <rect x="14" y="14" width="7" height="7" />
+                  <rect x="3" y="14" width="7" height="7" />
+                </svg>
+                <span>{columns}/row</span>
+              </button>
             </div>
           </div>
 
@@ -1268,34 +1292,53 @@ export default function Page() {
           </div>
         )}
 
-        {/* The Grid / Decks (Media Uploaded) */}
-        <UploadGrid
-          items={sortedItems}
-          groups={memoryGroups}
-          isDeckMode={isDeckMode}
-          onRemove={handlePermanentDelete}
-          onRetry={handleRetry}
-          onTrash={handleMoveToTrash}
-          onRestore={handleRestore}
-          isTrashView={activeTab === 'trash'}
-          isSelectMode={activeTab === 'trash' && isSelectingTrash}
-          selectedIds={selectedTrashIds}
-          selectedBytes={selectedTrashBytes}
-          onToggleSelect={handleToggleSelectTrashItem}
-          onToggleSelectAll={handleToggleSelectAllTrash}
-          onToggleSelectMode={() => setIsSelectingTrash((prev) => !prev)}
-          onEnlarge={setEnlargedItem}
-          emptyMessage={
-            activeTab === 'trash'
-              ? 'Trash is empty'
-              : 'Nothing developed yet'
-          }
-          emptySubMessage={
-            activeTab === 'trash'
-              ? 'Photos and videos moved to trash will appear here.'
-              : 'Add your first shot above.'
-          }
-        />
+        {/* The Grid / Decks (Media Uploaded with Pinch & Dynamic Columns) */}
+        <div ref={containerRef} className="touch-pan-y">
+          <UploadGrid
+            items={sortedItems}
+            groups={memoryGroups}
+            isDeckMode={isDeckMode}
+            columns={columns}
+            onCycleColumns={cycleColumns}
+            onRemove={handlePermanentDelete}
+            onRetry={handleRetry}
+            onTrash={handleMoveToTrash}
+            onRestore={handleRestore}
+            isTrashView={activeTab === 'trash'}
+            isSelectMode={activeTab === 'trash' && isSelectingTrash}
+            selectedIds={selectedTrashIds}
+            selectedBytes={selectedTrashBytes}
+            onToggleSelect={handleToggleSelectTrashItem}
+            onToggleSelectAll={handleToggleSelectAllTrash}
+            onToggleSelectMode={() => setIsSelectingTrash((prev) => !prev)}
+            onEnlarge={setEnlargedItem}
+            emptyMessage={
+              activeTab === 'trash'
+                ? 'Trash is empty'
+                : 'Nothing developed yet'
+            }
+            emptySubMessage={
+              activeTab === 'trash'
+                ? 'Photos and videos moved to trash will appear here.'
+                : 'Add your first shot above.'
+            }
+          />
+        </div>
+
+        {/* Floating Pinch / Column Toast Indicator */}
+        {toastMessage && (
+          <div className="fixed top-16 sm:top-20 inset-x-0 z-50 flex justify-center pointer-events-none animate-fade-in px-4">
+            <div className="bg-ink/90 text-paper-light border border-line/30 shadow-2xl rounded-full px-4 py-1.5 font-stamp text-xs flex items-center gap-2 backdrop-blur-md">
+              <svg className="w-3.5 h-3.5 text-rust" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+              </svg>
+              <span>{toastMessage}</span>
+            </div>
+          </div>
+        )}
 
         {/* Mobile-First Floating Action Bar for Trash Multi-Select */}
         {activeTab === 'trash' && isSelectingTrash && selectedTrashIds.size > 0 && (

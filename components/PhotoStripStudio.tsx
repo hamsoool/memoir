@@ -286,6 +286,9 @@ export default function PhotoStripStudio({
 
   // Selected photo IDs per slot (array of string or null)
   const [slotPhotoIds, setSlotPhotoIds] = useState<(string | null)[]>([]);
+  // Zoom scale per slot (default 1.0 = 100%, clamped between 0.75x and 2.5x)
+  const [slotZooms, setSlotZooms] = useState<number[]>([]);
+  const slotPinchStart = useRef<{ slotIdx: number; dist: number; initialZoom: number } | null>(null);
 
   // Picker drawer state: which slot index is currently choosing a photo
   const [activeSlotPickerIndex, setActiveSlotPickerIndex] = useState<number | null>(null);
@@ -338,6 +341,7 @@ export default function PhotoStripStudio({
         }
         return next;
       });
+      setSlotZooms(new Array(activeLayout.slots).fill(1));
     }
   }, [isOpen]);
 
@@ -388,6 +392,15 @@ export default function PhotoStripStudio({
         }
       }
 
+      return next;
+    });
+
+    setSlotZooms((prev) => {
+      const targetSize = chosenLayout.slots;
+      const next = new Array(targetSize).fill(1);
+      for (let i = 0; i < targetSize; i++) {
+        if (prev[i]) next[i] = prev[i];
+      }
       return next;
     });
 
@@ -526,6 +539,22 @@ export default function PhotoStripStudio({
       next[slotIdx] = null;
       return next;
     });
+    setSlotZooms((prev) => {
+      const next = [...prev];
+      next[slotIdx] = 1;
+      return next;
+    });
+  };
+
+  // Zoom in or out on a photo within its slot (clamped 0.75x to 2.5x)
+  const handleZoomSlot = (slotIdx: number, delta: number) => {
+    setSlotZooms((prev) => {
+      const next = [...prev];
+      const current = next[slotIdx] || 1;
+      const updated = Math.min(2.5, Math.max(0.75, Number((current + delta).toFixed(2))));
+      next[slotIdx] = updated;
+      return next;
+    });
   };
 
   // Auto-fill slots with newest photos
@@ -555,9 +584,10 @@ export default function PhotoStripStudio({
   // Clear all slots
   const handleClearAll = () => {
     setSlotPhotoIds(new Array(activeLayout.slots).fill(null));
+    setSlotZooms(new Array(activeLayout.slots).fill(1));
   };
 
-  // Relocate or swap photos between two slot indices
+  // Relocate or swap photos between two slot indices (preserves individual zoom settings)
   const handleSwapSlots = (fromIdx: number, toIdx: number) => {
     if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return;
     setSlotPhotoIds((prev) => {
@@ -566,6 +596,14 @@ export default function PhotoStripStudio({
       const targetPhoto = next[toIdx];
       next[fromIdx] = targetPhoto;
       next[toIdx] = sourcePhoto;
+      return next;
+    });
+    setSlotZooms((prev) => {
+      const next = [...prev];
+      const z1 = next[fromIdx] || 1;
+      const z2 = next[toIdx] || 1;
+      next[fromIdx] = z2;
+      next[toIdx] = z1;
       return next;
     });
     setSlotToSwapIndex(null);
@@ -632,48 +670,90 @@ export default function PhotoStripStudio({
     setDragOverSlotIndex(null);
   };
 
-  // Touch drag-and-drop support for mobile / touch devices
+  // Touch drag-and-drop support for mobile / touch devices (1-finger drag) + 2-finger pinch zoom
   const handleTouchStart = (slotIdx: number, e: React.TouchEvent) => {
     if (!slotPhotoIds[slotIdx]) return;
-    const touch = e.touches[0];
-    touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+
+    if (e.touches.length === 2) {
+      // 2-finger pinch on slot: zoom photo
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      slotPinchStart.current = {
+        slotIdx,
+        dist,
+        initialZoom: slotZooms[slotIdx] || 1,
+      };
+      touchStartPos.current = null;
+      setTouchDraggingSlotIndex(null);
+      setDragOverSlotIndex(null);
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      // 1-finger touch: prepare to move/swap photo
+      slotPinchStart.current = null;
+      const touch = e.touches[0];
+      touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+    }
   };
 
   const handleTouchMove = (slotIdx: number, e: React.TouchEvent) => {
-    if (!touchStartPos.current || !slotPhotoIds[slotIdx]) return;
-    const touch = e.touches[0];
-    const dx = Math.abs(touch.clientX - touchStartPos.current.x);
-    const dy = Math.abs(touch.clientY - touchStartPos.current.y);
+    // Handle 2-finger pinch zoom on this slot
+    if (e.touches.length === 2 && slotPinchStart.current?.slotIdx === slotIdx) {
+      if (e.cancelable) e.preventDefault();
+      const currentDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const ratio = currentDist / slotPinchStart.current.dist;
+      const targetZoom = Math.min(2.5, Math.max(0.75, Number((slotPinchStart.current.initialZoom * ratio).toFixed(2))));
+      setSlotZooms((prev) => {
+        const next = [...prev];
+        next[slotIdx] = targetZoom;
+        return next;
+      });
+      return;
+    }
 
-    if (dx > 6 || dy > 6) {
-      if (e.cancelable) {
-        e.preventDefault();
-      }
-      if (touchDraggingSlotIndex === null) {
-        setTouchDraggingSlotIndex(slotIdx);
-        setSlotToSwapIndex(null);
-      }
-      setTouchCurrentPos({ x: touch.clientX, y: touch.clientY });
+    // Handle 1-finger drag to relocate/move slot
+    if (e.touches.length === 1 && touchStartPos.current && slotPhotoIds[slotIdx]) {
+      const touch = e.touches[0];
+      const dx = Math.abs(touch.clientX - touchStartPos.current.x);
+      const dy = Math.abs(touch.clientY - touchStartPos.current.y);
 
-      // Hit-test element at touch position (offset slightly upward toward finger focal point)
-      const targetEl =
-        document.elementFromPoint(touch.clientX, touch.clientY - 12) ||
-        document.elementFromPoint(touch.clientX, touch.clientY);
-      const slotEl = targetEl?.closest('[data-slot-index]');
-      if (slotEl) {
-        const targetIdx = Number(slotEl.getAttribute('data-slot-index'));
-        if (!isNaN(targetIdx) && targetIdx !== slotIdx) {
-          setDragOverSlotIndex(targetIdx);
+      if (dx > 6 || dy > 6) {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        if (touchDraggingSlotIndex === null) {
+          setTouchDraggingSlotIndex(slotIdx);
+          setSlotToSwapIndex(null);
+        }
+        setTouchCurrentPos({ x: touch.clientX, y: touch.clientY });
+
+        // Hit-test element at touch position (offset slightly upward toward finger focal point)
+        const targetEl =
+          document.elementFromPoint(touch.clientX, touch.clientY - 12) ||
+          document.elementFromPoint(touch.clientX, touch.clientY);
+        const slotEl = targetEl?.closest('[data-slot-index]');
+        if (slotEl) {
+          const targetIdx = Number(slotEl.getAttribute('data-slot-index'));
+          if (!isNaN(targetIdx) && targetIdx !== slotIdx) {
+            setDragOverSlotIndex(targetIdx);
+          } else {
+            setDragOverSlotIndex(null);
+          }
         } else {
           setDragOverSlotIndex(null);
         }
-      } else {
-        setDragOverSlotIndex(null);
       }
     }
   };
 
   const handleTouchEnd = (slotIdx: number) => {
+    slotPinchStart.current = null;
     if (touchDraggingSlotIndex !== null && dragOverSlotIndex !== null && dragOverSlotIndex !== slotIdx) {
       handleSwapSlots(slotIdx, dragOverSlotIndex);
     }
@@ -684,6 +764,7 @@ export default function PhotoStripStudio({
   };
 
   const handleTouchCancel = () => {
+    slotPinchStart.current = null;
     touchStartPos.current = null;
     setTouchDraggingSlotIndex(null);
     setDragOverSlotIndex(null);
@@ -904,6 +985,17 @@ export default function PhotoStripStudio({
           } else {
             sh = img.width / boxAspect;
             sy = (img.height - sh) / 2;
+          }
+
+          // Apply slot zoom scale to canvas crop
+          const zoom = slotZooms[index] || 1;
+          if (zoom !== 1) {
+            const newSw = sw / zoom;
+            const newSh = sh / zoom;
+            sx += (sw - newSw) / 2;
+            sy += (sh - newSh) / 2;
+            sw = newSw;
+            sh = newSh;
           }
 
           ctx.drawImage(img, sx, sy, sw, sh, px, py, pw, ph);
@@ -1238,6 +1330,12 @@ export default function PhotoStripStudio({
               onTouchMove={(e) => handleTouchMove(slotIdx, e)}
               onTouchEnd={() => handleTouchEnd(slotIdx)}
               onTouchCancel={handleTouchCancel}
+              onWheel={(e) => {
+                if (!photoSrc || !isInteractive) return;
+                e.preventDefault();
+                e.stopPropagation();
+                handleZoomSlot(slotIdx, e.deltaY < 0 ? 0.15 : -0.15);
+              }}
               onClick={() => {
                 if (isInteractive && !touchDraggingSlotIndex && draggedSlotIndex === null) {
                   handleSlotClick(slotIdx);
@@ -1275,7 +1373,7 @@ export default function PhotoStripStudio({
                     ? slotToSwapIndex === slotIdx
                       ? 'Tap to cancel swap selection'
                       : 'Tap to swap with selected photo'
-                    : 'Drag or tap to swap photo'
+                    : 'Drag to swap photo • Tap +/− to zoom'
                   : slotToSwapIndex !== null
                   ? 'Tap to move selected photo here'
                   : 'Tap to choose photo'
@@ -1322,12 +1420,17 @@ export default function PhotoStripStudio({
 
               {photoSrc ? (
                 <>
-                  <img
-                    src={photoSrc}
-                    alt={`Slot ${slotIdx + 1}`}
-                    style={{ filter: getFilterStyle(filterId) }}
-                    className="w-full h-full object-cover rounded-[1px] transition-all duration-300 pointer-events-none select-none"
-                  />
+                  <div className="w-full h-full overflow-hidden rounded-[1px] flex items-center justify-center pointer-events-none">
+                    <img
+                      src={photoSrc}
+                      alt={`Slot ${slotIdx + 1}`}
+                      style={{
+                        filter: getFilterStyle(filterId),
+                        transform: `scale(${slotZooms[slotIdx] || 1})`,
+                      }}
+                      className="w-full h-full object-cover transition-transform duration-200 pointer-events-none select-none"
+                    />
+                  </div>
 
                   {activeTheme.id === 'film' && (
                     <span className="absolute bottom-1 right-1.5 font-stamp text-[9px] text-[#E5B560] drop-shadow-xs pointer-events-none">
@@ -1336,8 +1439,12 @@ export default function PhotoStripStudio({
                   )}
 
                   {isInteractive && !isSwapSelected && (
-                    <div className="absolute inset-0 bg-ink/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-1.5">
-                      <span className="font-stamp text-[9px] text-paper-light bg-ink/80 px-1.5 py-0.5 rounded-xs flex items-center gap-1 pointer-events-none">
+                    <div className="absolute inset-0 bg-ink/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-1.5 p-1">
+                      {/* Drag Move Badge */}
+                      <span
+                        className="font-stamp text-[9px] text-paper-light bg-ink/80 px-1.5 py-0.5 rounded-xs flex items-center gap-1 pointer-events-none shadow-xs"
+                        title="Drag to swap or relocate"
+                      >
                         <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                           <polyline points="5 9 2 12 5 15"/>
                           <polyline points="9 5 12 2 15 5"/>
@@ -1348,6 +1455,41 @@ export default function PhotoStripStudio({
                         </svg>
                         <span>Move</span>
                       </span>
+
+                      {/* Tactile Zoom In / Zoom Out Pill */}
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-0.5 bg-ink/90 px-1.5 py-0.5 rounded-full border border-paper-light/30 text-paper-light shadow-md select-none"
+                      >
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleZoomSlot(slotIdx, -0.15);
+                          }}
+                          disabled={(slotZooms[slotIdx] || 1) <= 0.75}
+                          title="Zoom out"
+                          className="w-4 h-4 flex items-center justify-center hover:text-rust disabled:opacity-30 disabled:pointer-events-none font-bold text-xs active:scale-90 transition"
+                        >
+                          −
+                        </button>
+                        <span className="font-stamp text-[8px] min-w-[26px] text-center font-medium">
+                          {Math.round((slotZooms[slotIdx] || 1) * 100)}%
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleZoomSlot(slotIdx, 0.15);
+                          }}
+                          disabled={(slotZooms[slotIdx] || 1) >= 2.5}
+                          title="Zoom in"
+                          className="w-4 h-4 flex items-center justify-center hover:text-rust disabled:opacity-30 disabled:pointer-events-none font-bold text-xs active:scale-90 transition"
+                        >
+                          +
+                        </button>
+                      </div>
+
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1355,7 +1497,7 @@ export default function PhotoStripStudio({
                           handleRemovePhotoFromSlot(slotIdx, e);
                         }}
                         title="Remove photo"
-                        className="w-5 h-5 flex items-center justify-center bg-rust text-paper-light rounded-full hover:bg-rust-dark transition"
+                        className="w-5 h-5 flex items-center justify-center bg-rust text-paper-light rounded-full hover:bg-rust-dark transition shadow-xs active:scale-90"
                       >
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

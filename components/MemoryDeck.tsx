@@ -7,6 +7,8 @@ import PhotoPrint from './PhotoPrint';
 
 interface MemoryDeckProps {
   group: MemoryDeckGroup;
+  columns?: 2 | 3 | 4;
+  onCycleColumns?: () => void;
   onRemove: (id: string) => void;
   onRetry: (id: string) => void;
   onTrash?: (id: string) => void;
@@ -23,6 +25,8 @@ interface MemoryDeckProps {
 
 export default function MemoryDeck({
   group,
+  columns = 2,
+  onCycleColumns,
   onRemove,
   onRetry,
   onTrash,
@@ -143,6 +147,30 @@ export default function MemoryDeck({
             </div>
           )}
 
+          {/* Column Density Button (only visible when deck is spread) */}
+          {isSpread && onCycleColumns && (
+            <button
+              type="button"
+              onClick={onCycleColumns}
+              title={`Showing ${columns} photos per row. Tap or pinch to change.`}
+              className="font-stamp text-xs text-ink/75 hover:text-ink px-2 sm:px-2.5 py-1 rounded-xs border border-line bg-paper-light hover:border-ink/40 transition flex items-center gap-1.5 shadow-xs active:scale-95 shrink-0"
+            >
+              <svg
+                className="w-3.5 h-3.5 text-rust"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+              </svg>
+              <span>{columns}/row</span>
+            </button>
+          )}
+
           {/* Tactile Toggle to Spread or Stack Deck */}
           <button
             type="button"
@@ -249,7 +277,15 @@ export default function MemoryDeck({
         </div>
       ) : (
         /* When Separated / Spread Out */
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4.5 animate-fade-in p-2.5 sm:p-4 bg-paper/40 rounded-sm border border-line/50">
+        <div
+          className={`grid ${
+            columns === 4
+              ? 'grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-1.5 sm:gap-3'
+              : columns === 3
+              ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3.5'
+              : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4.5'
+          } animate-fade-in p-1.5 sm:p-4 bg-paper/40 rounded-sm border border-line/50`}
+        >
           {items.map((item, i) => (
             <PhotoPrint
               key={item.id}

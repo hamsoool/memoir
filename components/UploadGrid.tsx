@@ -24,6 +24,8 @@ export default function UploadGrid({
   onToggleSelectAll,
   onToggleSelectMode,
   onEnlarge,
+  columns = 2,
+  onCycleColumns,
   emptyMessage = 'Nothing developed yet',
   emptySubMessage = 'Add your first shot above.',
 }: {
@@ -42,6 +44,8 @@ export default function UploadGrid({
   onToggleSelectAll?: () => void;
   onToggleSelectMode?: () => void;
   onEnlarge?: (item: UploadItem) => void;
+  columns?: 2 | 3 | 4;
+  onCycleColumns?: () => void;
   emptyMessage?: string;
   emptySubMessage?: string;
 }) {
@@ -97,6 +101,8 @@ export default function UploadGrid({
           <MemoryDeck
             key={group.id}
             group={group}
+            columns={columns}
+            onCycleColumns={onCycleColumns}
             onRemove={onRemove}
             onRetry={onRetry}
             onTrash={onTrash}
@@ -130,8 +136,31 @@ export default function UploadGrid({
             </p>
           </div>
 
-          {onToggleSelectAll && (
-            <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {onCycleColumns && (
+              <button
+                type="button"
+                onClick={onCycleColumns}
+                title={`Showing ${columns} photos per row. Tap or pinch to change.`}
+                className="font-stamp text-xs text-ink/75 hover:text-ink px-2 sm:px-2.5 py-1 rounded-xs border border-line bg-paper-light hover:border-ink/40 transition flex items-center gap-1.5 shadow-xs active:scale-95 shrink-0"
+              >
+                <svg
+                  className="w-3.5 h-3.5 text-rust"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <rect x="3" y="3" width="7" height="7" />
+                  <rect x="14" y="3" width="7" height="7" />
+                  <rect x="14" y="14" width="7" height="7" />
+                  <rect x="3" y="14" width="7" height="7" />
+                </svg>
+                <span>{columns}/row</span>
+              </button>
+            )}
+
+            {onToggleSelectAll && (
               <button
                 type="button"
                 onClick={onToggleSelectAll}
@@ -155,12 +184,20 @@ export default function UploadGrid({
                     : 'Select All'}
                 </span>
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-3.5 sm:gap-x-5 gap-y-5 sm:gap-y-6">
+      <div
+        className={`grid ${
+          columns === 4
+            ? 'grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 gap-x-1.5 sm:gap-x-3 gap-y-3 sm:gap-y-5'
+            : columns === 3
+            ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-2.5 sm:gap-x-4 gap-y-4 sm:gap-y-5'
+            : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-3.5 sm:gap-x-5 gap-y-5 sm:gap-y-6'
+        }`}
+      >
         {displayedItems.map((item, i) => (
           <PhotoPrint
             key={item.id}
