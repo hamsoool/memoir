@@ -252,6 +252,14 @@ export default function PhotoStripStudio({
   const [isMobilePreviewExpanded, setIsMobilePreviewExpanded] = useState(false);
   const [isMobilePreviewVisible, setIsMobilePreviewVisible] = useState(false);
 
+  // Staged progressive adaptive reveal states per studio step:
+  // Step 1: Size & Layout first -> short animation reveals Theme & Next button
+  // Step 2: Photo Slots first -> short animation reveals Tone filter & Next button
+  // Step 3: Note caption first -> short animation reveals Stamp motif & export buttons
+  const [isThemeRevealed, setIsThemeRevealed] = useState(false);
+  const [isPhotosSubRevealed, setIsPhotosSubRevealed] = useState(false);
+  const [isNoteSubRevealed, setIsNoteSubRevealed] = useState(false);
+
   // Refs for smooth navigation & auto-fit preview scaling
   const themeSectionRef = useRef<HTMLDivElement>(null);
   const nextStyleBtnRef = useRef<HTMLDivElement>(null);
@@ -345,6 +353,24 @@ export default function PhotoStripStudio({
     }
   }, [isOpen]);
 
+  // Staged adaptive reveals: secondary sections only appear if anything in that step has been tapped
+  useEffect(() => {
+    if (!isOpen) {
+      setIsThemeRevealed(false);
+      setIsPhotosSubRevealed(false);
+      setIsNoteSubRevealed(false);
+      return;
+    }
+
+    if (studioStep === 'style') {
+      setIsThemeRevealed(false);
+    } else if (studioStep === 'photos') {
+      setIsPhotosSubRevealed(false);
+    } else if (studioStep === 'note') {
+      setIsNoteSubRevealed(false);
+    }
+  }, [isOpen, studioStep]);
+
   // Dynamically observe preview stage and strip card to guarantee 100% fit with zero scroll
   useEffect(() => {
     if (!isOpen) return;
@@ -378,6 +404,7 @@ export default function PhotoStripStudio({
   // Handle selecting a strip size: resize slots directly and smooth gentle scroll to theme section
   const handleSelectLayout = (id: StripLayoutId) => {
     setLayoutId(id);
+    setIsThemeRevealed(true);
     const chosenLayout = LAYOUTS.find((l) => l.id === id) || LAYOUTS[0];
     setSlotPhotoIds((prev) => {
       const targetSize = chosenLayout.slots;
@@ -433,6 +460,7 @@ export default function PhotoStripStudio({
 
   // Open the photo picker drawer with snapshot for Cancel support
   const handleOpenPhotoPicker = (slotIdx: number) => {
+    setIsPhotosSubRevealed(true);
     setDrawerInitialSlotIds([...slotPhotoIds]);
     setActiveSlotPickerIndex(slotIdx);
   };
@@ -559,6 +587,7 @@ export default function PhotoStripStudio({
 
   // Auto-fill slots with newest photos
   const handleAutoFill = () => {
+    setIsPhotosSubRevealed(true);
     setSlotPhotoIds(() => {
       const next = new Array(activeLayout.slots).fill(null);
       for (let i = 0; i < activeLayout.slots && i < photoItems.length; i++) {
@@ -570,6 +599,7 @@ export default function PhotoStripStudio({
 
   // Randomize / shuffle slots
   const handleShuffle = () => {
+    setIsPhotosSubRevealed(true);
     if (photoItems.length === 0) return;
     const shuffled = [...photoItems].sort(() => Math.random() - 0.5);
     setSlotPhotoIds(() => {
@@ -583,6 +613,7 @@ export default function PhotoStripStudio({
 
   // Clear all slots
   const handleClearAll = () => {
+    setIsPhotosSubRevealed(true);
     setSlotPhotoIds(new Array(activeLayout.slots).fill(null));
     setSlotZooms(new Array(activeLayout.slots).fill(1));
   };
@@ -611,6 +642,7 @@ export default function PhotoStripStudio({
 
   // Slot click handler: Supports Tap-to-Swap for mobile & desktop, or opens photo picker
   const handleSlotClick = (slotIdx: number) => {
+    setIsPhotosSubRevealed(true);
     if (touchDraggingSlotIndex !== null || draggedSlotIndex !== null) return;
     const hasPhoto = Boolean(slotPhotoIds[slotIdx]);
 
@@ -1740,7 +1772,7 @@ export default function PhotoStripStudio({
             {studioStep === 'style' && (
               <div className="flex flex-col gap-3.5 max-w-lg mx-auto w-full animate-studio-reveal">
                 {/* Choose Strip Size */}
-                <div>
+                <div onClick={() => setIsThemeRevealed(true)}>
                   <div className="mb-2">
                     <h3 className="font-display italic text-sm sm:text-base text-ink leading-tight">
                       Size & Layout
@@ -1889,72 +1921,81 @@ export default function PhotoStripStudio({
                   </div>
                 </div>
 
-                {/* Color Theme */}
-                <div ref={themeSectionRef} className="pt-2 border-t border-line/50">
-                  <div className="mb-2">
-                    <h3 className="font-display italic text-sm sm:text-base text-ink leading-tight">
-                      Theme
-                    </h3>
-                  </div>
+                {/* Staged Adaptive Appearance: Theme and Next button appear after short animation */}
+                {isThemeRevealed && (
+                  <div className="flex flex-col gap-3.5 animate-adaptive-reveal">
+                    {/* Color Theme */}
+                    <div ref={themeSectionRef} className="pt-2 border-t border-line/50">
+                      <div className="mb-2">
+                        <h3 className="font-display italic text-sm sm:text-base text-ink leading-tight">
+                          Theme
+                        </h3>
+                      </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                    {THEMES.map((theme) => {
-                      const isSelected = themeId === theme.id;
-                      return (
-                        <button
-                          key={theme.id}
-                          type="button"
-                          onClick={() => handleSelectTheme(theme.id)}
-                          className={`p-2 rounded-xs border transition-all duration-200 flex items-center gap-2 text-left ${
-                            isSelected
-                              ? 'ring-2 ring-rust border-rust shadow-sm scale-[1.01]'
-                              : 'border-line hover:border-ink/40'
-                          }`}
-                          style={{ backgroundColor: theme.bgHex }}
-                        >
-                          <span
-                            className="w-3.5 h-3.5 rounded-full border border-black/15 shrink-0 shadow-2xs"
-                            style={{ backgroundColor: theme.cardHex }}
-                          />
-                          <div className="min-w-0">
-                            <p
-                              className="font-display font-medium text-[11px] sm:text-xs truncate leading-tight"
-                              style={{ color: theme.textHex }}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                        {THEMES.map((theme) => {
+                          const isSelected = themeId === theme.id;
+                          return (
+                            <button
+                              key={theme.id}
+                              type="button"
+                              onClick={() => handleSelectTheme(theme.id)}
+                              className={`p-2 rounded-xs border transition-all duration-200 flex items-center gap-2 text-left ${
+                                isSelected
+                                  ? 'ring-2 ring-rust border-rust shadow-sm scale-[1.01]'
+                                  : 'border-line hover:border-ink/40'
+                              }`}
+                              style={{ backgroundColor: theme.bgHex }}
                             >
-                              {theme.name}
-                            </p>
-                            <p
-                              className="font-display italic text-[9px] sm:text-[10px] truncate opacity-75"
-                              style={{ color: theme.textHex }}
-                            >
-                              {theme.badge}
-                            </p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                              <span
+                                className="w-3.5 h-3.5 rounded-full border border-black/15 shrink-0 shadow-2xs"
+                                style={{ backgroundColor: theme.cardHex }}
+                              />
+                              <div className="min-w-0">
+                                <p
+                                  className="font-display font-medium text-[11px] sm:text-xs truncate leading-tight"
+                                  style={{ color: theme.textHex }}
+                                >
+                                  {theme.name}
+                                </p>
+                                <p
+                                  className="font-display italic text-[9px] sm:text-[10px] truncate opacity-75"
+                                  style={{ color: theme.textHex }}
+                                >
+                                  {theme.badge}
+                                </p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
 
-                <div ref={nextStyleBtnRef}>
-                  <button
-                    type="button"
-                    onClick={() => setStudioStep('photos')}
-                    className="mt-1 w-full py-2.5 bg-rust hover:bg-rust-dark text-paper-light rounded-xs font-display font-medium text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-print"
-                  >
-                    <span>Next: Pick Photos ({filledSlotsCount}/{activeLayout.slots})</span>
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="9 18 15 12 9 6" />
-                    </svg>
-                  </button>
-                </div>
+                    <div ref={nextStyleBtnRef}>
+                      <button
+                        type="button"
+                        onClick={() => setStudioStep('photos')}
+                        className="mt-1 w-full py-2.5 bg-rust hover:bg-rust-dark text-paper-light rounded-xs font-display font-medium text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-print"
+                      >
+                        <span>Next: Pick Photos ({filledSlotsCount}/{activeLayout.slots})</span>
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {/* STEP 2: OUR PHOTOS */}
             {studioStep === 'photos' && (
               <div className="flex flex-col gap-4 max-w-lg mx-auto animate-studio-reveal">
-                <div className="flex items-center justify-between flex-wrap gap-2">
+                <div
+                  className="flex flex-col gap-4"
+                  onClick={() => setIsPhotosSubRevealed(true)}
+                >
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                   <h3 className="font-display italic text-base text-ink leading-tight">
                     Photos
                   </h3>
@@ -2181,66 +2222,76 @@ export default function PhotoStripStudio({
                     );
                   })}
                 </div>
+              </div>
 
-                {/* Photo Filter Tone */}
-                <div className="p-3 bg-paper/60 border border-line/60 rounded-xs flex items-center justify-between flex-wrap gap-2">
-                  <span className="font-display italic text-xs text-ink/75">Photo Tone:</span>
-                  <div className="inline-flex rounded-xs border border-line bg-paper-light p-0.5 font-display text-xs">
-                    {(
-                      [
-                        { id: 'original', label: 'Original' },
-                        { id: 'warm', label: 'Warm' },
-                        { id: 'bw', label: 'B&W' },
-                        { id: 'soft', label: 'Soft' },
-                      ] as const
-                    ).map((f) => (
+              {/* Staged Adaptive Appearance: Photo Tone and navigation buttons appear after short animation */}
+              {isPhotosSubRevealed && (
+                  <div className="flex flex-col gap-3 animate-adaptive-reveal">
+                    {/* Photo Filter Tone */}
+                    <div className="p-3 bg-paper/60 border border-line/60 rounded-xs flex items-center justify-between flex-wrap gap-2">
+                      <span className="font-display italic text-xs text-ink/75">Photo Tone:</span>
+                      <div className="inline-flex rounded-xs border border-line bg-paper-light p-0.5 font-display text-xs">
+                        {(
+                          [
+                            { id: 'original', label: 'Original' },
+                            { id: 'warm', label: 'Warm' },
+                            { id: 'bw', label: 'B&W' },
+                            { id: 'soft', label: 'Soft' },
+                          ] as const
+                        ).map((f) => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => setFilterId(f.id)}
+                            className={`px-2.5 py-0.5 rounded-xs transition text-xs ${
+                              filterId === f.id
+                                ? 'bg-ink text-paper-light font-medium shadow-2xs'
+                                : 'text-ink/65 hover:text-ink hover:bg-ink/5'
+                            }`}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Step Navigation Buttons */}
+                    <div className="flex items-center gap-2 mt-1">
                       <button
-                        key={f.id}
                         type="button"
-                        onClick={() => setFilterId(f.id)}
-                        className={`px-2.5 py-0.5 rounded-xs transition text-xs ${
-                          filterId === f.id
-                            ? 'bg-ink text-paper-light font-medium shadow-2xs'
-                            : 'text-ink/65 hover:text-ink hover:bg-ink/5'
-                        }`}
+                        onClick={() => setStudioStep('style')}
+                        className="px-4 py-2.5 border border-line bg-paper hover:bg-paper-light text-ink rounded-xs font-display text-xs transition"
                       >
-                        {f.label}
+                        ← Back to Style
                       </button>
-                    ))}
+                      <button
+                        type="button"
+                        onClick={() => setStudioStep('note')}
+                        className="flex-1 py-2.5 bg-rust hover:bg-rust-dark text-paper-light rounded-xs font-display font-medium text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-print"
+                      >
+                        <span>Next: Add Sweet Note</span>
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
-                </div>
-
-                {/* Step Navigation Buttons */}
-                <div className="flex items-center gap-2 mt-1">
-                  <button
-                    type="button"
-                    onClick={() => setStudioStep('style')}
-                    className="px-4 py-2.5 border border-line bg-paper hover:bg-paper-light text-ink rounded-xs font-display text-xs transition"
-                  >
-                    ← Back to Style
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStudioStep('note')}
-                    className="flex-1 py-2.5 bg-rust hover:bg-rust-dark text-paper-light rounded-xs font-display font-medium text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-print"
-                  >
-                    <span>Next: Add Sweet Note</span>
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="9 18 15 12 9 6" />
-                    </svg>
-                  </button>
-                </div>
+                )}
               </div>
             )}
 
             {/* STEP 3: NOTE & STAMP */}
             {studioStep === 'note' && (
               <div className="flex flex-col gap-4 max-w-lg mx-auto animate-studio-reveal">
-                <div>
-                  <h3 className="font-display italic text-base text-ink leading-tight">
-                    Note & Stamp
-                  </h3>
-                </div>
+                <div
+                  className="flex flex-col gap-4"
+                  onClick={() => setIsNoteSubRevealed(true)}
+                >
+                  <div>
+                    <h3 className="font-display italic text-base text-ink leading-tight">
+                      Note & Stamp
+                    </h3>
+                  </div>
 
                 {/* Main Title / Caption */}
                 <div>
@@ -2250,7 +2301,11 @@ export default function PhotoStripStudio({
                   <input
                     type="text"
                     value={primaryFooter}
-                    onChange={(e) => setPrimaryFooter(e.target.value)}
+                    onFocus={() => setIsNoteSubRevealed(true)}
+                    onChange={(e) => {
+                      setPrimaryFooter(e.target.value);
+                      setIsNoteSubRevealed(true);
+                    }}
                     placeholder="together since 01/07/26"
                     maxLength={40}
                     className="w-full font-display text-xs sm:text-sm bg-paper border border-line px-3 py-2 rounded-xs text-ink focus:border-rust focus:ring-2 focus:ring-rust/20 transition-all duration-200 outline-none"
@@ -2266,7 +2321,11 @@ export default function PhotoStripStudio({
                     <input
                       type="text"
                       value={secondaryFooter}
-                      onChange={(e) => setSecondaryFooter(e.target.value)}
+                      onFocus={() => setIsNoteSubRevealed(true)}
+                      onChange={(e) => {
+                        setSecondaryFooter(e.target.value);
+                        setIsNoteSubRevealed(true);
+                      }}
                       placeholder="our favorite day"
                       maxLength={30}
                       className="w-full font-display italic text-xs bg-paper border border-line px-3 py-2 rounded-xs text-ink focus:border-rust focus:ring-2 focus:ring-rust/20 transition-all duration-200 outline-none"
@@ -2280,7 +2339,10 @@ export default function PhotoStripStudio({
                         <input
                            type="checkbox"
                           checked={showDate}
-                          onChange={(e) => setShowDate(e.target.checked)}
+                          onChange={(e) => {
+                            setShowDate(e.target.checked);
+                            setIsNoteSubRevealed(true);
+                          }}
                           className="accent-rust scale-90"
                         />
                         Show
@@ -2290,143 +2352,174 @@ export default function PhotoStripStudio({
                       type="text"
                       disabled={!showDate}
                       value={customDate}
-                      onChange={(e) => setCustomDate(e.target.value)}
+                      onFocus={() => setIsNoteSubRevealed(true)}
+                      onChange={(e) => {
+                        setCustomDate(e.target.value);
+                        setIsNoteSubRevealed(true);
+                      }}
                       placeholder={getTodayFormattedDate()}
                       className="w-full font-display text-xs bg-paper border border-line px-3 py-2 rounded-xs text-ink disabled:opacity-40 focus:border-rust focus:ring-2 focus:ring-rust/20 transition-all duration-200 outline-none"
                     />
                   </div>
                 </div>
+              </div>
 
-                {/* Stamp Motif */}
-                <div className="pt-2 border-t border-line/50">
-                  <span className="font-display text-xs text-ink/80 block mb-1.5">
-                    Choose a Stamp Motif:
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setStampId('heart')}
-                      className={`px-3 py-1.5 rounded-xs transition text-xs flex items-center gap-1.5 border ${
-                        stampId === 'heart'
-                          ? 'bg-ink text-paper-light border-ink font-medium shadow-xs'
-                          : 'bg-paper border-line text-ink/70 hover:text-ink'
-                      }`}
-                    >
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                      </svg>
-                      <span>Heart</span>
-                    </button>
+              {/* Staged Adaptive Appearance: Stamp Motif, Top Title, and Save Photo Strip appear after short animation */}
+              {isNoteSubRevealed && (
+                  <div className="flex flex-col gap-3.5 animate-adaptive-reveal">
+                    {/* Stamp Motif */}
+                    <div className="pt-2 border-t border-line/50">
+                      <span className="font-display text-xs text-ink/80 block mb-1.5">
+                        Choose a Stamp Motif:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStampId('heart');
+                            setIsNoteSubRevealed(true);
+                          }}
+                          className={`px-3 py-1.5 rounded-xs transition text-xs flex items-center gap-1.5 border ${
+                            stampId === 'heart'
+                              ? 'bg-ink text-paper-light border-ink font-medium shadow-xs'
+                              : 'bg-paper border-line text-ink/70 hover:text-ink'
+                          }`}
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                          </svg>
+                          <span>Heart</span>
+                        </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setStampId('sparkle')}
-                      className={`px-3 py-1.5 rounded-xs transition text-xs flex items-center gap-1.5 border ${
-                        stampId === 'sparkle'
-                          ? 'bg-ink text-paper-light border-ink font-medium shadow-xs'
-                          : 'bg-paper border-line text-ink/70 hover:text-ink'
-                      }`}
-                    >
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2l2.6 7.4L22 12l-7.4 2.6L12 22l-2.6-7.4L2 12l7.4-2.6z" />
-                      </svg>
-                      <span>Sparkle</span>
-                    </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStampId('sparkle');
+                            setIsNoteSubRevealed(true);
+                          }}
+                          className={`px-3 py-1.5 rounded-xs transition text-xs flex items-center gap-1.5 border ${
+                            stampId === 'sparkle'
+                              ? 'bg-ink text-paper-light border-ink font-medium shadow-xs'
+                              : 'bg-paper border-line text-ink/70 hover:text-ink'
+                          }`}
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2l2.6 7.4L22 12l-7.4 2.6L12 22l-2.6-7.4L2 12l7.4-2.6z" />
+                          </svg>
+                          <span>Sparkle</span>
+                        </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setStampId('film')}
-                      className={`px-3 py-1.5 rounded-xs transition text-xs flex items-center gap-1.5 border ${
-                        stampId === 'film'
-                          ? 'bg-ink text-paper-light border-ink font-medium shadow-xs'
-                          : 'bg-paper border-line text-ink/70 hover:text-ink'
-                      }`}
-                    >
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                        <path d="M7 3v18" />
-                        <path d="M17 3v18" />
-                      </svg>
-                      <span>Camera</span>
-                    </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStampId('film');
+                            setIsNoteSubRevealed(true);
+                          }}
+                          className={`px-3 py-1.5 rounded-xs transition text-xs flex items-center gap-1.5 border ${
+                            stampId === 'film'
+                              ? 'bg-ink text-paper-light border-ink font-medium shadow-xs'
+                              : 'bg-paper border-line text-ink/70 hover:text-ink'
+                          }`}
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" />
+                            <path d="M7 3v18" />
+                            <path d="M17 3v18" />
+                          </svg>
+                          <span>Camera</span>
+                        </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setStampId('blossom')}
-                      className={`px-3 py-1.5 rounded-xs transition text-xs flex items-center gap-1.5 border ${
-                        stampId === 'blossom'
-                          ? 'bg-ink text-paper-light border-ink font-medium shadow-xs'
-                          : 'bg-paper border-line text-ink/70 hover:text-ink'
-                      }`}
-                    >
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="12" cy="12" r="3" />
-                        <path d="M12 2a3.5 3.5 0 0 0-3.5 3.5c0 1.5 1 2.8 2.3 3.3A3.5 3.5 0 0 0 7.5 12a3.5 3.5 0 0 0 3.3 3.2A3.5 3.5 0 0 0 12 22a3.5 3.5 0 0 0 3.5-3.5 3.5 3.5 0 0 0-3.3-3.2A3.5 3.5 0 0 0 16.5 12a3.5 3.5 0 0 0-3.3-3.2A3.5 3.5 0 0 0 12 2z" />
-                      </svg>
-                      <span>Bloom</span>
-                    </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStampId('blossom');
+                            setIsNoteSubRevealed(true);
+                          }}
+                          className={`px-3 py-1.5 rounded-xs transition text-xs flex items-center gap-1.5 border ${
+                            stampId === 'blossom'
+                              ? 'bg-ink text-paper-light border-ink font-medium shadow-xs'
+                              : 'bg-paper border-line text-ink/70 hover:text-ink'
+                          }`}
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                            <circle cx="12" cy="12" r="3" />
+                            <path d="M12 2a3.5 3.5 0 0 0-3.5 3.5c0 1.5 1 2.8 2.3 3.3A3.5 3.5 0 0 0 7.5 12a3.5 3.5 0 0 0 3.3 3.2A3.5 3.5 0 0 0 12 22a3.5 3.5 0 0 0 3.5-3.5 3.5 3.5 0 0 0-3.3-3.2A3.5 3.5 0 0 0 16.5 12a3.5 3.5 0 0 0-3.3-3.2A3.5 3.5 0 0 0 12 2z" />
+                          </svg>
+                          <span>Bloom</span>
+                        </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setStampId('none')}
-                      className={`px-3 py-1.5 rounded-xs transition text-xs border ${
-                        stampId === 'none'
-                          ? 'bg-ink text-paper-light border-ink font-medium shadow-xs'
-                          : 'bg-paper border-line text-ink/70 hover:text-ink'
-                      }`}
-                    >
-                      None
-                    </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStampId('none');
+                            setIsNoteSubRevealed(true);
+                          }}
+                          className={`px-3 py-1.5 rounded-xs transition text-xs border ${
+                            stampId === 'none'
+                              ? 'bg-ink text-paper-light border-ink font-medium shadow-xs'
+                              : 'bg-paper border-line text-ink/70 hover:text-ink'
+                          }`}
+                        >
+                          None
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Optional Top Title */}
+                    <div className="pt-2 border-t border-line/50 flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="show-strip-header"
+                        checked={showHeader}
+                        onChange={(e) => {
+                          setShowHeader(e.target.checked);
+                          setIsNoteSubRevealed(true);
+                        }}
+                        className="rounded-2xs accent-rust"
+                      />
+                      <label htmlFor="show-strip-header" className="font-display text-xs text-ink/80 cursor-pointer">
+                        Add top photobooth title
+                      </label>
+                      {showHeader && (
+                        <input
+                          type="text"
+                          value={headerText}
+                          onChange={(e) => {
+                            setHeaderText(e.target.value);
+                            setIsNoteSubRevealed(true);
+                          }}
+                          placeholder="MEMOIR PHOTOBOOTH"
+                          maxLength={30}
+                          className="flex-1 ml-2 font-display text-xs bg-paper border border-line px-2.5 py-1 rounded-xs text-ink focus:border-rust outline-none"
+                        />
+                      )}
+                    </div>
+
+                    {/* Step Navigation: Back to photos & Save */}
+                    <div className="flex items-center gap-2 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setStudioStep('photos')}
+                        className="px-4 py-2.5 border border-line bg-paper hover:bg-paper-light text-ink rounded-xs font-display text-xs transition"
+                      >
+                        ← Back to Photos
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownload}
+                        disabled={isExporting}
+                        className="flex-1 py-2.5 bg-rust hover:bg-rust-dark text-paper-light rounded-xs font-display font-medium text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-print disabled:opacity-50"
+                      >
+                        <svg className="w-3.5 h-3.5 text-paper-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        <span>Save Photo Strip</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-
-                {/* Optional Top Title */}
-                <div className="pt-2 border-t border-line/50 flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="show-strip-header"
-                    checked={showHeader}
-                    onChange={(e) => setShowHeader(e.target.checked)}
-                    className="rounded-2xs accent-rust"
-                  />
-                  <label htmlFor="show-strip-header" className="font-display text-xs text-ink/80 cursor-pointer">
-                    Add top photobooth title
-                  </label>
-                  {showHeader && (
-                    <input
-                      type="text"
-                      value={headerText}
-                      onChange={(e) => setHeaderText(e.target.value)}
-                      placeholder="MEMOIR PHOTOBOOTH"
-                      maxLength={30}
-                      className="flex-1 ml-2 font-display text-xs bg-paper border border-line px-2.5 py-1 rounded-xs text-ink focus:border-rust outline-none"
-                    />
-                  )}
-                </div>
-
-                {/* Step Navigation: Back to photos */}
-                <div className="flex items-center gap-2 mt-2">
-                  <button
-                    type="button"
-                    onClick={() => setStudioStep('photos')}
-                    className="px-4 py-2.5 border border-line bg-paper hover:bg-paper-light text-ink rounded-xs font-display text-xs transition"
-                  >
-                    ← Back to Photos
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDownload}
-                    disabled={isExporting}
-                    className="flex-1 py-2.5 bg-rust hover:bg-rust-dark text-paper-light rounded-xs font-display font-medium text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-print disabled:opacity-50"
-                  >
-                    <svg className="w-3.5 h-3.5 text-paper-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    <span>Save Photo Strip</span>
-                  </button>
-                </div>
+                )}
               </div>
             )}
           </div>

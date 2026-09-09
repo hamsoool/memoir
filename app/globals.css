@@ -122,6 +122,27 @@ main {
   will-change: opacity, transform;
 }
 
+/* Staged photobooth adaptive reveal animation for progressive studio steps */
+@keyframes adaptive-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  65% {
+    opacity: 0.95;
+    transform: translateY(-1.5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-adaptive-reveal {
+  animation: adaptive-reveal 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity, transform;
+}
+
 /* Photobooth Strip Morph & Buildup Animations */
 @keyframes strip-morph {
   0% {
@@ -423,5 +444,21 @@ main {
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
   }
+}
+
+/* Mobile Photo Reel Pinch Optimization: Prevent callout sheets & context menus on iOS Safari */
+.pinch-container {
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.pinch-container img,
+.pinch-container video {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
 }
 

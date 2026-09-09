@@ -7,7 +7,7 @@ import PhotoPrint from './PhotoPrint';
 
 interface MemoryDeckProps {
   group: MemoryDeckGroup;
-  columns?: 2 | 3 | 4;
+  columns?: 1 | 2 | 3 | 4;
   onCycleColumns?: () => void;
   onRemove: (id: string) => void;
   onRetry: (id: string) => void;
@@ -283,6 +283,8 @@ export default function MemoryDeck({
               ? 'grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-1.5 sm:gap-3'
               : columns === 3
               ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3.5'
+              : columns === 1
+              ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-5 max-w-xl mx-auto'
               : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4.5'
           } animate-fade-in p-1.5 sm:p-4 bg-paper/40 rounded-sm border border-line/50`}
         >

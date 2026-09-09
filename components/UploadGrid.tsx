@@ -44,7 +44,7 @@ export default function UploadGrid({
   onToggleSelectAll?: () => void;
   onToggleSelectMode?: () => void;
   onEnlarge?: (item: UploadItem) => void;
-  columns?: 2 | 3 | 4;
+  columns?: 1 | 2 | 3 | 4;
   onCycleColumns?: () => void;
   emptyMessage?: string;
   emptySubMessage?: string;
@@ -190,11 +190,13 @@ export default function UploadGrid({
       )}
 
       <div
-        className={`grid ${
+        className={`grid transition-all duration-300 ${
           columns === 4
             ? 'grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 gap-x-1.5 sm:gap-x-3 gap-y-3 sm:gap-y-5'
             : columns === 3
             ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-2.5 sm:gap-x-4 gap-y-4 sm:gap-y-5'
+            : columns === 1
+            ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 sm:gap-x-6 gap-y-6 sm:gap-y-8 max-w-xl mx-auto w-full'
             : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-3.5 sm:gap-x-5 gap-y-5 sm:gap-y-6'
         }`}
       >
