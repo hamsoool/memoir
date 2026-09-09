@@ -165,9 +165,16 @@ export function usePinchGrid() {
       resetTransformWithAnimation();
     }
 
+    function isEventOverTarget(e: Event | TouchEvent) {
+      if (!target) return false;
+      const t = e.target as Node | null;
+      return Boolean(t && (target === t || target.contains(t)));
+    }
+
     // --- WebKit Native Gesture API (iOS Safari / WebKit) ---
     function onGestureStart(e: any) {
       if (!target) return;
+      if (!isEventOverTarget(e)) return;
       e.preventDefault();
       isPinching = true;
       currentScale = 1;
@@ -203,7 +210,7 @@ export function usePinchGrid() {
 
     // --- Standard TouchEvent API (Android Chrome & Cross-Platform) ---
     function onTouchStart(e: TouchEvent) {
-      if (e.touches.length === 2) {
+      if (e.touches.length === 2 && isEventOverTarget(e)) {
         if (!target) return;
         isPinching = true;
         hasHapticFired = false;
@@ -217,22 +224,39 @@ export function usePinchGrid() {
     }
 
     function onTouchMove(e: TouchEvent) {
-      if (!isPinching || e.touches.length !== 2) return;
-      if (e.cancelable) e.preventDefault();
+      if (e.touches.length === 2) {
+        if (!isPinching && isEventOverTarget(e)) {
+          // Both fingers down, initialize pinch dynamically
+          isPinching = true;
+          hasHapticFired = false;
+          startDist = getDistance(e.touches);
+          const center = getCenter(e.touches);
+          currentScale = 1;
+          document.body.style.overflow = 'hidden';
+          if (target) target.style.touchAction = 'none';
+          applyLiveTransform(1, center.x, center.y);
+        }
 
-      const dist = getDistance(e.touches);
-      if (startDist > 0) {
-        currentScale = dist / startDist;
-        const clamped = Math.min(1.5, Math.max(0.65, currentScale));
-        applyLiveTransform(clamped);
+        if (isPinching) {
+          if (e.cancelable) e.preventDefault();
 
-        if (!hasHapticFired && (currentScale > 1.15 || currentScale < 0.85)) {
-          hasHapticFired = true;
-          if (typeof navigator !== 'undefined' && navigator.vibrate) {
-            navigator.vibrate(12);
+          const dist = getDistance(e.touches);
+          if (startDist > 0) {
+            currentScale = dist / startDist;
+            const clamped = Math.min(1.5, Math.max(0.65, currentScale));
+            applyLiveTransform(clamped);
+
+            if (!hasHapticFired && (currentScale > 1.15 || currentScale < 0.85)) {
+              hasHapticFired = true;
+              if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                navigator.vibrate(12);
+              }
+            }
           }
         }
+        return;
       }
+      if (!isPinching) return;
     }
 
     function onTouchEnd(e: TouchEvent) {
@@ -245,9 +269,12 @@ export function usePinchGrid() {
       }
     }
 
-    // Gesture must originate inside the photo grid target
+    // Gesture can originate inside the photo grid target
     target.addEventListener('gesturestart', onGestureStart as any, { passive: false });
+    window.addEventListener('gesturestart', onGestureStart as any, { passive: false });
+
     target.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
 
     // Active movement & release tracked on window to guarantee 100% smooth tracking across screen edges
     window.addEventListener('gesturechange', onGestureChange as any, { passive: false });
@@ -259,7 +286,10 @@ export function usePinchGrid() {
 
     return () => {
       target.removeEventListener('gesturestart', onGestureStart as any);
+      window.removeEventListener('gesturestart', onGestureStart as any);
+
       target.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchstart', onTouchStart);
 
       window.removeEventListener('gesturechange', onGestureChange as any);
       window.removeEventListener('gestureend', onGestureEnd as any);

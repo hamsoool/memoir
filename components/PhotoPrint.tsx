@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef } from 'react';
 import type { UploadItem } from '@/lib/types';
 import { formatDate, formatBytes, truncateName } from '@/lib/format';
 
@@ -41,6 +42,13 @@ export default function PhotoPrint({
   const displayName = item.file?.name || item.name || 'Memory';
   const mediaSrc = item.previewUrl || item.url || '';
   const itemSize = item.bytes || item.file?.size || 0;
+
+  const touchStartPosRef = useRef<{ x: number; y: number; isMultiTouch: boolean }>({
+    x: 0,
+    y: 0,
+    isMultiTouch: false,
+  });
+  const touchMovedRef = useRef<boolean>(false);
 
   return (
     <div
@@ -126,7 +134,36 @@ export default function PhotoPrint({
 
       {/* Media container: click to enlarge */}
       <div
+        onTouchStart={(e) => {
+          if (e.touches.length > 1) {
+            touchStartPosRef.current.isMultiTouch = true;
+            touchMovedRef.current = true;
+            return;
+          }
+          touchStartPosRef.current = {
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY,
+            isMultiTouch: false,
+          };
+          touchMovedRef.current = false;
+        }}
+        onTouchMove={(e) => {
+          if (touchStartPosRef.current.isMultiTouch) {
+            touchMovedRef.current = true;
+            return;
+          }
+          const dx = Math.abs(e.touches[0].clientX - touchStartPosRef.current.x);
+          const dy = Math.abs(e.touches[0].clientY - touchStartPosRef.current.y);
+          if (dx > 8 || dy > 8) {
+            touchMovedRef.current = true;
+          }
+        }}
         onClick={(e) => {
+          if (touchMovedRef.current || touchStartPosRef.current.isMultiTouch) {
+            touchMovedRef.current = false;
+            touchStartPosRef.current.isMultiTouch = false;
+            return;
+          }
           if (isSelectMode && onToggleSelect) {
             return;
           }
