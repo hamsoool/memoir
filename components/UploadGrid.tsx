@@ -1,9 +1,12 @@
 'use client';
 
+import { useState, useEffect, useRef } from 'react';
 import type { UploadItem } from '@/lib/types';
 import { formatBytes, type MemoryDeckGroup } from '@/lib/format';
 import PhotoPrint from './PhotoPrint';
 import MemoryDeck from './MemoryDeck';
+
+const BATCH_SIZE = 50;
 
 export default function UploadGrid({
   items,
@@ -42,6 +45,41 @@ export default function UploadGrid({
   emptyMessage?: string;
   emptySubMessage?: string;
 }) {
+  const [visibleCount, setVisibleCount] = useState<number>(BATCH_SIZE);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Reset visible count when switching between reel and trash views
+  useEffect(() => {
+    setVisibleCount(BATCH_SIZE);
+  }, [isTrashView]);
+
+  const hasMore = visibleCount < items.length;
+  const displayedItems = items.slice(0, visibleCount);
+
+  // IntersectionObserver for mobile-friendly infinite scroll (50 items at a time)
+  useEffect(() => {
+    if (!hasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => Math.min(prev + BATCH_SIZE, items.length));
+        }
+      },
+      {
+        rootMargin: '400px 0px', // Preload next batch before user reaches absolute bottom
+        threshold: 0,
+      }
+    );
+
+    const el = sentinelRef.current;
+    if (el) observer.observe(el);
+
+    return () => {
+      if (el) observer.unobserve(el);
+    };
+  }, [hasMore, items.length]);
+
   if (items.length === 0) {
     return (
       <div className="border border-dashed border-line rounded-sm py-14 text-center bg-paper/30">
@@ -77,7 +115,7 @@ export default function UploadGrid({
     );
   }
 
-  // Standard flat grid view
+  // Standard flat grid view with continuous progressive scrolling
   return (
     <div className="flex flex-col">
       {/* Header directly above the archived photos when in flat grid view */}
@@ -123,7 +161,7 @@ export default function UploadGrid({
       )}
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-3.5 sm:gap-x-5 gap-y-5 sm:gap-y-6">
-        {items.map((item, i) => (
+        {displayedItems.map((item, i) => (
           <PhotoPrint
             key={item.id}
             item={item}
@@ -140,6 +178,52 @@ export default function UploadGrid({
           />
         ))}
       </div>
+
+      {/* Sentinel element to trigger auto-load of next batch as user scrolls */}
+      {hasMore && (
+        <div ref={sentinelRef} className="h-10 w-full pointer-events-none" aria-hidden="true" />
+      )}
+
+      {/* Mobile-friendly continuous reel status indicator */}
+      {items.length > BATCH_SIZE && (
+        <div className="mt-8 mb-2 flex flex-col items-center justify-center gap-2 text-center select-none">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-paper-light border border-line shadow-xs font-stamp text-xs text-ink/75">
+            {hasMore ? (
+              <>
+                <span className="w-1.5 h-1.5 rounded-full bg-rust animate-pulse" />
+                <span>Showing {displayedItems.length} of {items.length} moments</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5 text-rust" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span>All {items.length} memories developed</span>
+              </>
+            )}
+          </div>
+
+          {hasMore && (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setVisibleCount((prev) => Math.min(prev + BATCH_SIZE, items.length))}
+                className="font-stamp text-[11px] sm:text-xs text-ink/70 hover:text-ink underline decoration-line/60 hover:decoration-ink transition py-0.5"
+              >
+                Load next 50
+              </button>
+              <span className="text-ink/30 text-xs">•</span>
+              <button
+                type="button"
+                onClick={() => setVisibleCount(items.length)}
+                className="font-stamp text-[11px] sm:text-xs text-rust hover:text-rust-dark font-medium transition py-0.5"
+              >
+                Show all ({items.length})
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

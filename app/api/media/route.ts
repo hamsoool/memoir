@@ -6,6 +6,7 @@ import {
   getCloudinaryAccountUsage,
   isCloudinaryConfigured,
 } from '@/lib/cloudinary';
+import { getReelVersion, bumpReelVersion } from '@/lib/upstash';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,12 +20,14 @@ export async function GET() {
         totalBytes: 0,
         configured: false,
         usage: null,
+        version: '',
       });
     }
 
-    const [{ items, totalBytes }, usage] = await Promise.all([
+    const [{ items, totalBytes }, usage, version] = await Promise.all([
       getCloudinaryMedia(),
       getCloudinaryAccountUsage(),
+      getReelVersion(),
     ]);
 
     return NextResponse.json({
@@ -33,6 +36,7 @@ export async function GET() {
       totalBytes,
       configured: true,
       usage,
+      version,
     });
   } catch (err) {
     console.error('[Memoir] Error fetching Cloudinary media:', err);
@@ -62,6 +66,7 @@ export async function DELETE(request: Request) {
     // Support bulk deletion via body.items
     if (Array.isArray(body.items) && body.items.length > 0) {
       await bulkDeleteCloudinaryMedia(body.items);
+      await bumpReelVersion();
       return NextResponse.json({ ok: true, deletedCount: body.items.length });
     }
 
@@ -76,6 +81,7 @@ export async function DELETE(request: Request) {
     }
 
     await deleteCloudinaryMedia(publicId, kind === 'video' ? 'video' : 'image');
+    await bumpReelVersion();
 
     return NextResponse.json({ ok: true, deleted: publicId });
   } catch (err) {

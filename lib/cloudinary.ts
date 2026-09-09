@@ -112,14 +112,32 @@ export async function getCloudinaryMedia(customFolder?: string): Promise<{
 
   try {
     // Try the Search API first to get both images and videos ordered chronologically
-    const searchRes = await client.search
-      .expression(`folder:${folder}/* OR folder:${folder}`)
-      .with_field('tags')
-      .sort_by('created_at', 'desc')
-      .max_results(100)
-      .execute();
+    // Use cursor-based pagination to retrieve ALL items across multiple pages (up to 500 per page)
+    const allSearchResources: any[] = [];
+    let nextCursor: string | undefined = undefined;
+    let pageCount = 0;
+    const MAX_PAGES = 50; // Safety guard: up to 25,000 assets
 
-    const items: CloudinaryAsset[] = (searchRes.resources || []).map(
+    do {
+      let searchReq = client.search
+        .expression(`folder:${folder}/* OR folder:${folder}`)
+        .with_field('tags')
+        .with_field('context')
+        .sort_by('created_at', 'desc')
+        .max_results(500);
+
+      if (nextCursor) {
+        searchReq = searchReq.next_cursor(nextCursor);
+      }
+
+      const searchRes = await searchReq.execute();
+      const resources = searchRes.resources || [];
+      allSearchResources.push(...resources);
+      nextCursor = searchRes.next_cursor;
+      pageCount++;
+    } while (nextCursor && pageCount < MAX_PAGES);
+
+    const items: CloudinaryAsset[] = allSearchResources.map(
       (r: {
         public_id: string;
         secure_url?: string;
@@ -130,6 +148,7 @@ export async function getCloudinaryMedia(customFolder?: string): Promise<{
         created_at?: string;
         filename?: string;
         tags?: string[];
+        context?: { custom?: { original_name?: string } };
       }) => {
         const rawName = r.filename || r.public_id.split('/').pop() || 'memory';
         const isTrashed = Array.isArray(r.tags) && r.tags.includes('trash');
@@ -140,7 +159,7 @@ export async function getCloudinaryMedia(customFolder?: string): Promise<{
           format: r.format,
           kind: r.resource_type === 'video' ? 'video' : 'image',
           createdAt: r.created_at || new Date().toISOString(),
-          name: r.format ? `${rawName}.${r.format}` : rawName,
+          name: r.context?.custom?.original_name || (r.format ? `${rawName}.${r.format}` : rawName),
           isTrashed,
         };
       }
@@ -154,32 +173,43 @@ export async function getCloudinaryMedia(customFolder?: string): Promise<{
       searchError
     );
 
-    // Fallback: Fetch images & videos via standard Admin resources API
+    // Fallback: Fetch images & videos via standard Admin resources API across all pages
+    const fetchAllAdminResources = async (resourceType: 'image' | 'video') => {
+      const resources: any[] = [];
+      let cursor: string | undefined = undefined;
+      let pages = 0;
+      const MAX_ADMIN_PAGES = 50;
+
+      do {
+        try {
+          const res: any = await client.api.resources({
+            type: 'upload',
+            prefix: `${folder}/`,
+            resource_type: resourceType,
+            tags: true,
+            max_results: 500,
+            next_cursor: cursor,
+          });
+          if (res.resources && res.resources.length > 0) {
+            resources.push(...res.resources);
+          }
+          cursor = res.next_cursor;
+          pages++;
+        } catch (e) {
+          console.warn(`[Cloudinary] Admin fetch failed for ${resourceType}:`, e);
+          break;
+        }
+      } while (cursor && pages < MAX_ADMIN_PAGES);
+
+      return resources;
+    };
+
     const [imagesRes, videosRes] = await Promise.all([
-      client.api
-        .resources({
-          type: 'upload',
-          prefix: `${folder}/`,
-          resource_type: 'image',
-          tags: true,
-          max_results: 100,
-        })
-        .catch(() => ({ resources: [] })),
-      client.api
-        .resources({
-          type: 'upload',
-          prefix: `${folder}/`,
-          resource_type: 'video',
-          tags: true,
-          max_results: 100,
-        })
-        .catch(() => ({ resources: [] })),
+      fetchAllAdminResources('image'),
+      fetchAllAdminResources('video'),
     ]);
 
-    const combined = [
-      ...(imagesRes.resources || []),
-      ...(videosRes.resources || []),
-    ];
+    const combined = [...imagesRes, ...videosRes];
 
     const items: CloudinaryAsset[] = combined.map(
       (r: {

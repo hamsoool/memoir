@@ -144,12 +144,15 @@ export default function PhotoPrint({
           <img
             src={mediaSrc}
             alt=""
+            loading="lazy"
+            decoding="async"
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
             draggable={false}
           />
         ) : (
           <video
             src={mediaSrc}
+            preload="none"
             className="w-full h-full object-cover"
             muted
             playsInline

@@ -6,6 +6,7 @@ import {
   isCloudinaryConfigured,
 } from '@/lib/cloudinary';
 import { sendToDiscord } from '@/lib/discord';
+import { bumpReelVersion } from '@/lib/upstash';
 
 export const runtime = 'nodejs';
 
@@ -53,6 +54,8 @@ export async function POST(request: Request) {
       // 1. Check if this exact file content already exists in Cloudinary
       const existingAsset = await findDuplicateCloudinaryMedia(md5);
       if (existingAsset) {
+        // If it was restored from trash, bump the version so all devices update
+        await bumpReelVersion();
         return NextResponse.json({
           ok: true,
           key: existingAsset.publicId,
@@ -70,6 +73,9 @@ export async function POST(request: Request) {
           original_name: file.name,
         },
       });
+
+      // Update version across all devices
+      await bumpReelVersion();
 
       const skipDiscord = formData.get('skipDiscord') === 'true';
 

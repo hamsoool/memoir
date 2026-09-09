@@ -7,6 +7,7 @@ import {
   getCloudinaryMedia,
   isCloudinaryConfigured,
 } from '@/lib/cloudinary';
+import { bumpReelVersion } from '@/lib/upstash';
 
 export const runtime = 'nodejs';
 
@@ -34,6 +35,8 @@ export async function POST(request: Request) {
     } else {
       await tagCloudinaryMedia(publicId, 'trash');
     }
+
+    await bumpReelVersion();
 
     return NextResponse.json({ ok: true, publicId, action });
   } catch (err) {
@@ -67,6 +70,7 @@ export async function DELETE() {
           kind: item.kind,
         }))
       );
+      await bumpReelVersion();
     }
 
     return NextResponse.json({

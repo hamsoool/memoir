@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import FilmHeader from '@/components/FilmHeader';
 import DropZone from '@/components/DropZone';
 import UploadGrid from '@/components/UploadGrid';
@@ -117,75 +117,184 @@ export default function Page() {
     checkExistingSession();
   }, []);
 
-  const loadMediaFromCloudinary = useCallback(async () => {
-    try {
-      setIsLoadingMedia(true);
-      const res = await fetch('/api/media');
-      const data = await res.json();
-      if (data.ok && Array.isArray(data.items)) {
-        setIsConfigured(Boolean(data.configured));
+  const currentVersionRef = useRef<string>('');
 
-        const loaded: UploadItem[] = data.items.map(
-          (asset: {
-            publicId: string;
-            url: string;
-            kind: 'image' | 'video';
-            bytes?: number;
-            name?: string;
-            createdAt?: string;
-            isTrashed?: boolean;
-          }) => ({
-            id: asset.publicId,
-            previewUrl: asset.url,
-            url: asset.url,
-            key: asset.publicId,
-            kind: asset.kind,
-            status: 'done' as const,
-            progress: 100,
-            bytes: asset.bytes,
-            name: asset.name,
-            createdAt: asset.createdAt,
-            isTrashed: Boolean(asset.isTrashed),
-          })
-        );
-
-        setItems((prev) => {
-          if (prev.length === 0) return loaded;
-
-          const loadedKeys = new Set(
-            loaded.map((item) => item.key || item.id).filter(Boolean)
-          );
-          const loadedUrls = new Set(
-            loaded.map((item) => item.url).filter(Boolean)
-          );
-
-          // Keep items from prev that are still uploading, queued, or recently finished but not yet returned by Cloudinary
-          const pendingOrUnsynced = prev.filter((item) => {
-            if (item.status === 'uploading' || item.status === 'queued') {
-              return true;
-            }
-            if (item.status === 'done') {
-              const hasKey = item.key && loadedKeys.has(item.key);
-              const hasUrl = item.url && loadedUrls.has(item.url);
-              return !hasKey && !hasUrl;
-            }
-            return false;
-          });
-
-          return [...pendingOrUnsynced, ...loaded];
+  const loadMediaFromCloudinary = useCallback(
+    async (silent = false, signal?: AbortSignal) => {
+      try {
+        if (!silent) {
+          setIsLoadingMedia(true);
+        }
+        const res = await fetch('/api/media', {
+          signal,
+          cache: 'no-store',
         });
-      }
-    } catch (err) {
-      console.error('Failed to load media from Cloudinary:', err);
-    } finally {
-      setIsLoadingMedia(false);
-    }
-  }, []);
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.items)) {
+          setIsConfigured(Boolean(data.configured));
+          if (data.version) {
+            currentVersionRef.current = data.version;
+          }
 
+          const loaded: UploadItem[] = data.items.map(
+            (asset: {
+              publicId: string;
+              url: string;
+              kind: 'image' | 'video';
+              bytes?: number;
+              name?: string;
+              createdAt?: string;
+              isTrashed?: boolean;
+            }) => ({
+              id: asset.publicId,
+              previewUrl: asset.url,
+              url: asset.url,
+              key: asset.publicId,
+              kind: asset.kind,
+              status: 'done' as const,
+              progress: 100,
+              bytes: asset.bytes,
+              name: asset.name,
+              createdAt: asset.createdAt,
+              isTrashed: Boolean(asset.isTrashed),
+            })
+          );
+
+          setItems((prev) => {
+            if (prev.length === 0) return loaded;
+
+            const loadedKeys = new Set(
+              loaded.map((item) => item.key || item.id).filter(Boolean)
+            );
+            const loadedUrls = new Set(
+              loaded.map((item) => item.url).filter(Boolean)
+            );
+
+            // Keep items from prev that are still uploading, queued, or recently finished but not yet returned by Cloudinary
+            const pendingOrUnsynced = prev.filter((item) => {
+              if (item.status === 'uploading' || item.status === 'queued') {
+                return true;
+              }
+              if (item.status === 'done') {
+                const hasKey = item.key && loadedKeys.has(item.key);
+                const hasUrl = item.url && loadedUrls.has(item.url);
+                return !hasKey && !hasUrl;
+              }
+              return false;
+            });
+
+            return [...pendingOrUnsynced, ...loaded];
+          });
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
+        console.error('Failed to load media from Cloudinary:', err);
+      } finally {
+        if (!silent) {
+          setIsLoadingMedia(false);
+        }
+      }
+    },
+    []
+  );
+
+  // Initial load on unlock
   useEffect(() => {
     if (unlocked) {
       loadMediaFromCloudinary();
     }
+  }, [unlocked, loadMediaFromCloudinary]);
+
+  // Live Cross-Device Sync (Leak-Proof & Battery-Optimized)
+  useEffect(() => {
+    if (!unlocked) return;
+
+    let syncInterval: NodeJS.Timeout | null = null;
+    let inFlightController: AbortController | null = null;
+    let isChecking = false;
+
+    async function checkForUpdates() {
+      // Don't run check if document is hidden or if a check is already underway
+      if (document.hidden || isChecking) return;
+
+      try {
+        isChecking = true;
+        inFlightController?.abort();
+        inFlightController = new AbortController();
+
+        const currentVer = currentVersionRef.current;
+        const res = await fetch(
+          `/api/media/sync?version=${encodeURIComponent(currentVer)}`,
+          {
+            signal: inFlightController.signal,
+            cache: 'no-store',
+          }
+        );
+        const data = await res.json();
+
+        if (data.ok && data.version) {
+          currentVersionRef.current = data.version;
+          if (data.changed) {
+            // An external device uploaded, trashed, restored, or deleted media!
+            await loadMediaFromCloudinary(true, inFlightController.signal);
+          }
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
+        // Network glitches are gracefully swallowed
+      } finally {
+        isChecking = false;
+      }
+    }
+
+    function startPolling() {
+      if (syncInterval) clearInterval(syncInterval);
+      syncInterval = setInterval(checkForUpdates, 10000);
+    }
+
+    function stopPolling() {
+      if (syncInterval) {
+        clearInterval(syncInterval);
+        syncInterval = null;
+      }
+      inFlightController?.abort();
+      inFlightController = null;
+      isChecking = false;
+    }
+
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        // Tab is hidden or phone is locked: immediately halt polling to conserve battery and memory
+        stopPolling();
+      } else {
+        // Tab became visible again: immediately check for any uploads that occurred while away, then resume polling
+        checkForUpdates();
+        startPolling();
+      }
+    }
+
+    function handleFocusOrOnline() {
+      if (!document.hidden) {
+        checkForUpdates();
+      }
+    }
+
+    // Start polling while tab is active
+    startPolling();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocusOrOnline);
+    window.addEventListener('online', handleFocusOrOnline);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocusOrOnline);
+      window.removeEventListener('online', handleFocusOrOnline);
+    };
   }, [unlocked, loadMediaFromCloudinary]);
 
   const startUpload = useCallback(

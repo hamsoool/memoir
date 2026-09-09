@@ -307,3 +307,39 @@ export async function resetSecurityAttempts(identifier: string): Promise<void> {
     memorySecurityMap.delete(identifier);
   }
 }
+
+let inMemoryReelVersion = `${Date.now()}`;
+
+/**
+ * Retrieves the current reel version timestamp from Upstash Redis (with memory fallback).
+ */
+export async function getReelVersion(): Promise<string> {
+  const client = getRedis();
+  if (client) {
+    try {
+      const v = await client.get<string>('memoir:reel_version');
+      if (v) return String(v);
+    } catch (err) {
+      console.warn('[Upstash] Failed to get reel version:', err);
+    }
+  }
+  return inMemoryReelVersion;
+}
+
+/**
+ * Updates the reel version timestamp in Upstash Redis whenever media is uploaded, trashed, restored, or deleted.
+ * All connected devices checking /api/media/sync will immediately detect this change.
+ */
+export async function bumpReelVersion(): Promise<string> {
+  const newVersion = `${Date.now()}`;
+  inMemoryReelVersion = newVersion;
+  const client = getRedis();
+  if (client) {
+    try {
+      await client.set('memoir:reel_version', newVersion);
+    } catch (err) {
+      console.warn('[Upstash] Failed to bump reel version:', err);
+    }
+  }
+  return newVersion;
+}
