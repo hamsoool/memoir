@@ -256,11 +256,11 @@ export default function PhotoLightbox({
 
       // Check whether horizontal or vertical motion is dominant
       if (Math.abs(deltaX) > Math.abs(deltaY)) {
-        // Horizontal swipe: Right -> next, Left -> prev
+        // Drag left-to-right (deltaX > 0) or right-to-left (deltaX < 0)
         // Apply resistance if at boundary
-        if (deltaX > 0 && !hasNext) {
+        if (deltaX > 0 && !hasPrev) {
           setSwipeOffset(deltaX * 0.25);
-        } else if (deltaX < 0 && !hasPrev) {
+        } else if (deltaX < 0 && !hasNext) {
           setSwipeOffset(deltaX * 0.25);
         } else {
           setSwipeOffset(deltaX);
@@ -295,12 +295,12 @@ export default function PhotoLightbox({
       setIsSwiping(false);
 
       // Horizontal swipe navigation:
-      // Swipe Right (delta > 55px) -> Next Photo
-      // Swipe Left (delta < -55px) -> Previous Photo
-      if (swipeOffset > 55 && hasNext) {
-        handleNext();
-      } else if (swipeOffset < -55 && hasPrev) {
+      // Drag left-to-right (swipeOffset > 55px) -> Navigate to Next photo
+      // Drag right-to-left (swipeOffset < -55px) -> Navigate to Previous photo
+      if (swipeOffset > 55 && hasPrev) {
         handlePrev();
+      } else if (swipeOffset < -55 && hasNext) {
+        handleNext();
       }
 
       // Vertical swipe down (delta > 85px) -> Dismiss viewer
@@ -425,7 +425,7 @@ export default function PhotoLightbox({
       </div>
 
       {/* Swipe Direction Floating Feedback Badges */}
-      {isSwiping && swipeOffset > 30 && hasNext && (
+      {isSwiping && swipeOffset > 30 && hasPrev && (
         <div className="absolute right-4 sm:right-8 z-40 bg-rust text-paper-light font-stamp text-xs sm:text-sm px-3.5 py-1.5 rounded-full shadow-lg backdrop-blur-sm flex items-center gap-1.5 animate-pulse pointer-events-none">
           <span>Next</span>
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -434,7 +434,7 @@ export default function PhotoLightbox({
         </div>
       )}
 
-      {isSwiping && swipeOffset < -30 && hasPrev && (
+      {isSwiping && swipeOffset < -30 && hasNext && (
         <div className="absolute left-4 sm:left-8 z-40 bg-rust text-paper-light font-stamp text-xs sm:text-sm px-3.5 py-1.5 rounded-full shadow-lg backdrop-blur-sm flex items-center gap-1.5 animate-pulse pointer-events-none">
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <polyline points="15 18 9 12 15 6" />
