@@ -9,6 +9,7 @@ import {
   updateDraftWasOpen,
   isDraftMeaningful,
 } from '@/lib/photoStripStorage';
+import ConfirmDialog from './ConfirmDialog';
 
 export type StripLayoutId =
   | 'single-1'
@@ -345,12 +346,64 @@ export default function PhotoStripStudio({
     [slotPhotoIds]
   );
 
-  // Draft caching & auto-restore tracking
   const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
   const isInitialOpenRef = useRef(true);
   const activeSlotPickerIndexRef = useRef<number | null>(null);
   activeSlotPickerIndexRef.current = activeSlotPickerIndex;
   const handleCancelPickerRef = useRef<() => void>(() => {});
+
+  // Confirmation dialog state for Discord export, Save Photo Strip, and Start Fresh / Discard
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'discord' | 'download' | 'reset';
+    title: string;
+    badge: string;
+    description: string;
+    confirmLabel: string;
+    isDestructive: boolean;
+  } | null>(null);
+
+  const requestSendToDiscord = () => {
+    if (filledSlotsCount === 0) {
+      setExportMessage('Please select at least one photo before sending to Discord.');
+      setTimeout(() => setExportMessage(''), 3000);
+      return;
+    }
+    setConfirmAction({
+      type: 'discord',
+      title: 'Send to Discord?',
+      badge: 'Discord Keepsake',
+      description: 'Are you sure you want to send this custom photo strip to our private Discord channel?',
+      confirmLabel: 'Send to Discord',
+      isDestructive: false,
+    });
+  };
+
+  const requestDownload = () => {
+    if (filledSlotsCount === 0) {
+      setExportMessage('Please select at least one photo before downloading.');
+      setTimeout(() => setExportMessage(''), 3000);
+      return;
+    }
+    setConfirmAction({
+      type: 'download',
+      title: 'Save Photo Strip?',
+      badge: 'Download Keepsake',
+      description: 'Are you sure you want to generate and download this high-resolution photo strip to your device?',
+      confirmLabel: 'Save Photo Strip',
+      isDestructive: false,
+    });
+  };
+
+  const requestResetDraft = () => {
+    setConfirmAction({
+      type: 'reset',
+      title: 'Start Fresh?',
+      badge: 'Discard Photo Strip',
+      description: 'Are you sure you want to clear this photo strip? All selected photos, zooms, and custom text will be reset.',
+      confirmLabel: 'Discard & Start Fresh',
+      isDestructive: true,
+    });
+  };
 
   // Reset all fields to clean defaults and clear cached draft
   const resetToCleanDefaults = useCallback(() => {
@@ -1956,7 +2009,7 @@ export default function PhotoStripStudio({
             {(hasRestoredDraft || filledSlotsCount > 0) && (
               <button
                 type="button"
-                onClick={resetToCleanDefaults}
+                onClick={requestResetDraft}
                 className="px-2 py-1 text-ink/65 hover:text-rust hover:bg-rust/10 font-display text-[11px] rounded-xs border border-line/60 transition flex items-center gap-1"
                 title="Discard current draft and start fresh"
               >
@@ -2931,7 +2984,7 @@ export default function PhotoStripStudio({
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <button
               type="button"
-              onClick={handleSendToDiscord}
+              onClick={requestSendToDiscord}
               disabled={isExporting || isSendingDiscord}
               className={`px-3.5 py-2 border rounded-xs font-display text-xs transition disabled:opacity-50 flex items-center justify-center gap-1.5 ${
                 discordSuccess
@@ -2942,11 +2995,11 @@ export default function PhotoStripStudio({
             >
               {isSendingDiscord ? (
                 <svg
-                  className="w-3.5 h-3.5 animate-spin text-[#5865F2]"
+                  className="w-3.5 h-3.5 animate-spin text-rust"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  strokeWidth="3"
                 >
                   <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
                   <path d="M12 2a10 10 0 0 1 10 10" />
@@ -2961,7 +3014,7 @@ export default function PhotoStripStudio({
 
             <button
               type="button"
-              onClick={handleDownload}
+              onClick={requestDownload}
               disabled={isExporting}
               className="px-4 py-2 bg-rust hover:bg-rust-dark text-paper-light font-display font-medium text-xs rounded-xs shadow-print hover:shadow-md transition flex items-center justify-center gap-1.5 disabled:opacity-50"
             >
@@ -3282,6 +3335,31 @@ export default function PhotoStripStudio({
             Relocating
           </div>
         </div>
+      )}
+
+      {/* Confirmation Dialog for Discord, Download, and Reset Draft */}
+      {confirmAction && (
+        <ConfirmDialog
+          isOpen={true}
+          title={confirmAction.title}
+          badge={confirmAction.badge}
+          description={confirmAction.description}
+          confirmLabel={confirmAction.confirmLabel}
+          cancelLabel="Cancel"
+          isDestructive={confirmAction.isDestructive}
+          onConfirm={() => {
+            const action = confirmAction.type;
+            setConfirmAction(null);
+            if (action === 'discord') {
+              handleSendToDiscord();
+            } else if (action === 'download') {
+              handleDownload();
+            } else if (action === 'reset') {
+              resetToCleanDefaults();
+            }
+          }}
+          onCancel={() => setConfirmAction(null)}
+        />
       )}
     </>
   );

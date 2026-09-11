@@ -1052,10 +1052,10 @@ export default function Page() {
       </div>
 
       <section>
-        {/* View Switcher & Sorting Controls Bar - Ultra-compact 2-row mobile layout */}
-        <div className="mb-3 sm:mb-4.5 p-1 sm:p-1.5 md:p-2 bg-paper border border-line rounded-sm flex flex-col md:flex-row md:items-center justify-between gap-1 sm:gap-1.5 md:gap-2 shadow-2xs">
-          {/* Row 1 on mobile / Left on desktop: Tabs & Layout Toggle (Single strictly non-wrapping row) */}
-          <div className="flex items-center justify-between gap-1.5 w-full md:w-auto flex-nowrap overflow-x-auto no-scrollbar">
+        {/* View Switcher & Sorting Controls Bar */}
+        <div className="mb-3 sm:mb-4.5 p-1.5 sm:p-2 bg-paper border border-line rounded-sm flex flex-col xl:flex-row xl:items-center justify-between gap-2 shadow-2xs">
+          {/* Row 1 on mobile / Left on desktop: Tabs & Layout Toggle */}
+          <div className="flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2 w-full xl:w-auto flex-nowrap sm:flex-wrap overflow-x-auto sm:overflow-visible no-scrollbar">
             {/* Tabs: Reel vs Trash */}
             <div className="inline-flex rounded-xs border border-line bg-paper-light p-0.5 font-stamp text-[11px] sm:text-xs shrink-0">
               <button
@@ -1219,11 +1219,11 @@ export default function Page() {
             </div>
           </div>
 
-          {/* Row 2 on mobile / Right on desktop: Sorting & Order (Single strictly non-wrapping row) */}
-          <div className="flex items-center justify-between md:justify-end gap-1.5 sm:gap-2 w-full md:w-auto pt-1 sm:pt-1.5 md:pt-0 border-t border-line/40 md:border-t-0 flex-nowrap overflow-x-auto no-scrollbar">
+          {/* Row 2 on mobile / Right on desktop: Sorting & Order */}
+          <div className="flex items-center justify-between xl:justify-end gap-1.5 sm:gap-2 w-full xl:w-auto pt-1.5 sm:pt-2 xl:pt-0 border-t border-line/40 xl:border-t-0 flex-nowrap sm:flex-wrap overflow-x-auto sm:overflow-visible no-scrollbar">
             {/* Field Segmented Buttons */}
             <div className="flex items-center gap-1 shrink-0">
-              <span className="font-stamp text-[9px] sm:text-[10px] uppercase text-ink/40 tracking-wider hidden lg:inline mr-0.5">
+              <span className="font-stamp text-[10px] sm:text-[11px] uppercase text-ink/45 tracking-wider mr-0.5 shrink-0">
                 Sort:
               </span>
               <div className="inline-flex rounded-xs border border-line bg-paper-light p-0.5 font-stamp text-[11px] sm:text-xs shrink-0">
