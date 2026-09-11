@@ -305,7 +305,13 @@ export default function PhotoStripStudio({
   const [slotZooms, setSlotZooms] = useState<number[]>([]);
   // Vertical position offset per slot (0 = top, 50 = center midpoint, 100 = bottom)
   const [slotPositionsY, setSlotPositionsY] = useState<number[]>([]);
-  const slotPinchStart = useRef<{ slotIdx: number; dist: number; initialZoom: number } | null>(null);
+  const slotPinchStart = useRef<{
+    slotIdx: number;
+    dist: number;
+    initialZoom: number;
+    midY: number;
+    initialPosY: number;
+  } | null>(null);
 
   // Picker drawer state: which slot index is currently choosing a photo
   const [activeSlotPickerIndex, setActiveSlotPickerIndex] = useState<number | null>(null);
@@ -1001,20 +1007,28 @@ export default function PhotoStripStudio({
     setDragOverSlotIndex(null);
   };
 
-  // Touch drag-and-drop support for mobile / touch devices (1-finger drag) + 2-finger pinch zoom
+  // Touch drag-and-drop support for mobile / touch devices (1-finger drag) + 2-finger pinch zoom & vertical pan
   const handleTouchStart = (slotIdx: number, e: React.TouchEvent) => {
     if (!slotPhotoIds[slotIdx]) return;
 
     if (e.touches.length === 2) {
-      // 2-finger pinch on slot: zoom photo
+      // 2-finger touch on slot: pinch-zoom AND vertical repositioning
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
       const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
+        touch1.clientX - touch2.clientX,
+        touch1.clientY - touch2.clientY
       );
+      const midY = (touch1.clientY + touch2.clientY) / 2;
+      const initialZoom = slotZooms[slotIdx] || 1;
+      const initialPosY = typeof slotPositionsY[slotIdx] === 'number' ? slotPositionsY[slotIdx] : 50;
+
       slotPinchStart.current = {
         slotIdx,
-        dist,
-        initialZoom: slotZooms[slotIdx] || 1,
+        dist: Math.max(10, dist),
+        initialZoom,
+        midY,
+        initialPosY,
       };
       touchStartPos.current = null;
       setTouchDraggingSlotIndex(null);
@@ -1031,18 +1045,40 @@ export default function PhotoStripStudio({
   };
 
   const handleTouchMove = (slotIdx: number, e: React.TouchEvent) => {
-    // Handle 2-finger pinch zoom on this slot
+    // Handle 2-finger gesture on this slot: pinch zoom + vertical pan
     if (e.touches.length === 2 && slotPinchStart.current?.slotIdx === slotIdx) {
       if (e.cancelable) e.preventDefault();
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
       const currentDist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
+        touch1.clientX - touch2.clientX,
+        touch1.clientY - touch2.clientY
       );
+      const currentMidY = (touch1.clientY + touch2.clientY) / 2;
+
+      // 1. Pinch Zoom
       const ratio = currentDist / slotPinchStart.current.dist;
-      const targetZoom = Math.min(2.5, Math.max(0.75, Number((slotPinchStart.current.initialZoom * ratio).toFixed(2))));
+      const targetZoom = Math.min(
+        2.5,
+        Math.max(0.75, Number((slotPinchStart.current.initialZoom * ratio).toFixed(2)))
+      );
       setSlotZooms((prev) => {
         const next = [...prev];
         next[slotIdx] = targetZoom;
+        return next;
+      });
+
+      // 2. Vertical Repositioning (0% = Top, 50% = Mid, 100% = Bottom)
+      // Moving two fingers downward moves photo towards the bottom (targetPosY -> 100%)
+      // Moving two fingers upward moves photo towards the top (targetPosY -> 0%)
+      const deltaY = currentMidY - slotPinchStart.current.midY;
+      const targetPosY = Math.min(
+        100,
+        Math.max(0, Math.round(slotPinchStart.current.initialPosY + deltaY * 0.55))
+      );
+      setSlotPositionsY((prev) => {
+        const next = [...prev];
+        next[slotIdx] = targetPosY;
         return next;
       });
       return;
@@ -1331,11 +1367,9 @@ export default function PhotoStripStudio({
 
           // Apply vertical repositioning from top (0%) to bottom (100%)
           const posY = typeof slotPositionsY[index] === 'number' ? slotPositionsY[index] : 50;
-          if (posY !== 50) {
-            const maxSlackY = Math.max(0, img.height - sh);
-            if (maxSlackY > 0) {
-              sy = maxSlackY * (posY / 100);
-            }
+          const maxSlackY = Math.max(0, img.height - sh);
+          if (maxSlackY > 0) {
+            sy = maxSlackY * (posY / 100);
           }
           sy = Math.max(0, Math.min(img.height - sh, sy));
 
@@ -1690,7 +1724,16 @@ export default function PhotoStripStudio({
                 if (!photoSrc || !isInteractive) return;
                 e.preventDefault();
                 e.stopPropagation();
-                handleZoomSlot(slotIdx, e.deltaY < 0 ? 0.15 : -0.15);
+                if (e.shiftKey || e.altKey) {
+                  setSlotPositionsY((prev) => {
+                    const next = [...prev];
+                    const curr = typeof next[slotIdx] === 'number' ? next[slotIdx] : 50;
+                    next[slotIdx] = Math.min(100, Math.max(0, curr + (e.deltaY > 0 ? 5 : -5)));
+                    return next;
+                  });
+                } else {
+                  handleZoomSlot(slotIdx, e.deltaY < 0 ? 0.15 : -0.15);
+                }
               }}
               onClick={() => {
                 if (isInteractive && !touchDraggingSlotIndex && draggedSlotIndex === null) {
@@ -2392,6 +2435,21 @@ export default function PhotoStripStudio({
                         onTouchMove={(e) => handleTouchMove(idx, e)}
                         onTouchEnd={() => handleTouchEnd(idx)}
                         onTouchCancel={handleTouchCancel}
+                        onWheel={(e) => {
+                          if (!imgSrc) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (e.shiftKey || e.altKey) {
+                            setSlotPositionsY((prev) => {
+                              const next = [...prev];
+                              const curr = typeof next[idx] === 'number' ? next[idx] : 50;
+                              next[idx] = Math.min(100, Math.max(0, curr + (e.deltaY > 0 ? 5 : -5)));
+                              return next;
+                            });
+                          } else {
+                            handleZoomSlot(idx, e.deltaY < 0 ? 0.15 : -0.15);
+                          }
+                        }}
                         onClick={() => {
                           if (!touchDraggingSlotIndex && draggedSlotIndex === null) {
                             handleSlotClick(idx);
@@ -2462,8 +2520,13 @@ export default function PhotoStripStudio({
                             <img
                               src={imgSrc}
                               alt={`Photo ${idx + 1}`}
-                              style={{ filter: getFilterStyle(filterId) }}
-                              className="w-full h-full object-cover rounded-2xs animate-photo-develop transition-all duration-300 pointer-events-none select-none"
+                              style={{
+                                filter: getFilterStyle(filterId),
+                                objectPosition: `50% ${slotPositionsY[idx] ?? 50}%`,
+                                transform: `scale(${slotZooms[idx] || 1})`,
+                                transformOrigin: `50% ${slotPositionsY[idx] ?? 50}%`,
+                              }}
+                              className="w-full h-full object-cover rounded-2xs animate-photo-develop transition-all duration-150 pointer-events-none select-none"
                             />
                             <span className="absolute bottom-1 right-1 bg-ink/75 text-paper-light font-display text-[9px] px-1 rounded-2xs pointer-events-none">
                               Photo {idx + 1}
