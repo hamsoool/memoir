@@ -47,7 +47,7 @@ export default function MemoryDeck({
   // If there's only 1 item in the group, render it directly without stacking
   if (items.length === 1) {
     return (
-      <div className="flex flex-col w-full max-w-[240px] sm:max-w-[250px] mx-auto sm:mx-0">
+      <div className="flex flex-col w-full max-w-[240px] sm:max-w-[260px] lg:max-w-[280px] mx-auto sm:mx-0">
         <div className="mb-2 flex items-baseline justify-between font-stamp text-xs text-ink/60 px-1 gap-2 flex-wrap">
           <span className="font-display italic text-sm sm:text-base text-ink">{group.title}</span>
           {isTrashView ? (
@@ -228,7 +228,7 @@ export default function MemoryDeck({
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') setIsSpread(true);
           }}
-          className="group relative cursor-pointer select-none w-full max-w-[220px] sm:max-w-[240px] mx-auto sm:mx-0 transition-transform duration-300 active:scale-[0.98]"
+          className="group relative cursor-pointer select-none w-full max-w-[220px] sm:max-w-[260px] lg:max-w-[280px] mx-auto sm:mx-0 transition-transform duration-300 active:scale-[0.98]"
         >
           {/* Deck Layer 3 (deepest card) */}
           {items.length > 2 && (

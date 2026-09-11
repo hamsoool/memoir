@@ -9,8 +9,10 @@ interface ConfirmDialogProps {
   description: string | ReactNode;
   itemName?: string;
   confirmLabel?: string;
+  confirmIcon?: ReactNode;
   cancelLabel?: string;
   isDestructive?: boolean;
+  confirmClassName?: string;
   thumbnailUrl?: string;
   thumbnailKind?: 'image' | 'video';
   onConfirm: () => void;
@@ -20,12 +22,14 @@ interface ConfirmDialogProps {
 export default function ConfirmDialog({
   isOpen,
   title,
-  badge = 'confirmation',
+  badge,
   description,
   itemName,
   confirmLabel = 'Confirm',
+  confirmIcon,
   cancelLabel = 'Cancel',
   isDestructive = true,
+  confirmClassName,
   thumbnailUrl,
   thumbnailKind = 'image',
   onConfirm,
@@ -54,26 +58,30 @@ export default function ConfirmDialog({
       <div className="bg-paper-light border border-line rounded-sm shadow-print w-full max-w-sm sm:max-w-md overflow-hidden flex flex-col animate-scale-up">
         {/* Header Strip */}
         <div className="p-4 sm:p-5 border-b border-line bg-paper/70">
-          <div className="flex items-center justify-between gap-2">
-            <span
-              className={`font-stamp text-[10px] sm:text-[11px] uppercase tracking-widest ${
-                isDestructive ? 'text-rust font-medium' : 'text-ink/50'
-              }`}
-            >
-              {badge}
-            </span>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              {badge && (
+                <span
+                  className={`font-stamp text-[10px] sm:text-[11px] uppercase tracking-widest block mb-1.5 ${
+                    isDestructive ? 'text-rust font-medium' : 'text-ink/50'
+                  }`}
+                >
+                  {badge}
+                </span>
+              )}
+              <h2 className="font-display italic text-xl sm:text-2xl text-ink leading-tight">
+                {title}
+              </h2>
+            </div>
             <button
               type="button"
               onClick={onCancel}
               aria-label="Close"
-              className="text-ink/40 hover:text-ink transition text-xs font-stamp"
+              className="text-ink/40 hover:text-ink transition p-1 text-xs sm:text-sm font-stamp -mr-1 -mt-0.5 rounded-xs hover:bg-ink/5 flex items-center justify-center shrink-0"
             >
               ✕
             </button>
           </div>
-          <h2 className="font-display italic text-xl sm:text-2xl text-ink mt-1 leading-snug">
-            {title}
-          </h2>
         </div>
 
         {/* Content Body */}
@@ -107,7 +115,7 @@ export default function ConfirmDialog({
             </div>
           )}
 
-          <div className="text-xs sm:text-sm text-ink/80 font-display italic leading-relaxed">
+          <div className="text-xs sm:text-sm text-ink/75 font-display leading-relaxed">
             {description}
           </div>
 
@@ -136,20 +144,23 @@ export default function ConfirmDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 rounded-sm border border-line hover:border-ink/40 text-ink/70 hover:text-ink font-display italic text-sm transition"
+            className="px-4 py-2 rounded-xs border border-line bg-paper hover:bg-paper-light text-ink/80 hover:text-ink font-display font-medium text-xs sm:text-sm transition shadow-xs active:scale-[0.98]"
           >
             {cancelLabel}
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className={`px-5 py-2.5 rounded-sm text-paper-light font-display italic font-medium text-sm sm:text-base active:scale-[0.98] transition shadow-xs flex items-center gap-1.5 ${
-              isDestructive
-                ? 'bg-rust hover:bg-rust-dark'
-                : 'bg-ink hover:bg-ink/90'
+            className={`px-4 py-2 sm:px-4.5 sm:py-2 rounded-xs font-display font-medium text-xs sm:text-sm active:scale-[0.98] transition flex items-center justify-center gap-2 ${
+              confirmClassName
+                ? confirmClassName
+                : isDestructive
+                ? 'bg-rust hover:bg-rust-dark text-paper-light shadow-print'
+                : 'bg-ink hover:bg-ink/90 text-paper-light shadow-print'
             }`}
           >
-            {confirmLabel}
+            {confirmIcon}
+            <span>{confirmLabel}</span>
           </button>
         </div>
       </div>

@@ -6,7 +6,7 @@ export default function FilmHeader({
   onLock?: () => void;
 }) {
   return (
-    <header className="relative mb-6 sm:mb-7 text-center">
+    <header className="relative mb-6 sm:mb-7 text-center max-w-2xl mx-auto">
       {onLock && (
         <button
           type="button"

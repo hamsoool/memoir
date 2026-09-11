@@ -31,7 +31,7 @@ export default function DropZone({
   const cornerColor = dragging ? 'border-rust' : 'border-ink/40';
 
   return (
-    <div className="flex flex-col items-center gap-3 sm:gap-3.5 w-full max-w-md sm:max-w-lg mx-auto">
+    <div className="flex flex-col items-center gap-3 sm:gap-3.5 w-full max-w-md sm:max-w-lg lg:max-w-xl xl:max-w-2xl mx-auto">
       {/* The viewfinder: compact & responsive, intimate on desktop, touch-friendly on mobile */}
       <div
         role="button"
@@ -43,7 +43,7 @@ export default function DropZone({
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        className={`relative w-full h-36 sm:h-40 rounded-sm cursor-pointer select-none
+        className={`relative w-full h-36 sm:h-40 lg:h-44 rounded-sm cursor-pointer select-none
           transition-colors duration-150
           ${dragging ? 'bg-rust/[0.06]' : 'bg-paper-light/60 hover:bg-paper-light/80'}
         `}

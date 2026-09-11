@@ -96,7 +96,7 @@ export default function UploadGrid({
   // If in Deck Mode and grouped decks are provided, render as stacked decks of cards
   if (isDeckMode && groups && groups.length > 0) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 items-start">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 sm:gap-7 xl:gap-8 items-start">
         {groups.map((group) => (
           <MemoryDeck
             key={group.id}
@@ -192,12 +192,12 @@ export default function UploadGrid({
       <div
         className={`grid transition-all duration-300 ${
           columns === 4
-            ? 'grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 gap-x-1.5 sm:gap-x-3 gap-y-3 sm:gap-y-5'
+            ? 'grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 2xl:grid-cols-8 gap-x-2 sm:gap-x-3.5 lg:gap-x-4 gap-y-3.5 sm:gap-y-5 lg:gap-y-6'
             : columns === 3
-            ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-2.5 sm:gap-x-4 gap-y-4 sm:gap-y-5'
+            ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-5 xl:grid-cols-6 gap-x-2.5 sm:gap-x-4 lg:gap-x-5 gap-y-4 sm:gap-y-5 lg:gap-y-6'
             : columns === 1
-            ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 sm:gap-x-6 gap-y-6 sm:gap-y-8 max-w-xl mx-auto w-full'
-            : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-3.5 sm:gap-x-5 gap-y-5 sm:gap-y-6'
+            ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-x-4 sm:gap-x-6 lg:gap-x-8 gap-y-6 sm:gap-y-8 max-w-2xl mx-auto w-full'
+            : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-x-3.5 sm:gap-x-5 lg:gap-x-6 gap-y-5 sm:gap-y-6 lg:gap-y-7'
         }`}
       >
         {displayedItems.map((item, i) => (

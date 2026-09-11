@@ -923,7 +923,7 @@ export default function Page() {
           isLoadingMedia={isLoadingMedia}
         />
       )}
-      <main className="min-h-dvh px-4 sm:px-6 md:px-8 py-6 sm:py-10 max-w-4xl mx-auto">
+      <main className="min-h-dvh px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 py-6 sm:py-10 max-w-4xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-[1560px] mx-auto transition-all duration-300">
         <div className="sprocket-strip mb-6 sm:mb-7" />
 
       <FilmHeader count={activeItems.length} onLock={handleLockRequest} />
