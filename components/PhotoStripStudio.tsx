@@ -1069,12 +1069,12 @@ export default function PhotoStripStudio({
       });
 
       // 2. Vertical Repositioning (0% = Top, 50% = Mid, 100% = Bottom)
-      // Moving two fingers downward moves photo towards the bottom (targetPosY -> 100%)
-      // Moving two fingers upward moves photo towards the top (targetPosY -> 0%)
+      // Natural drag: dragging up moves the photo up (revealing the bottom)
+      // Dragging down moves the photo down (revealing the top)
       const deltaY = currentMidY - slotPinchStart.current.midY;
       const targetPosY = Math.min(
         100,
-        Math.max(0, Math.round(slotPinchStart.current.initialPosY + deltaY * 0.55))
+        Math.max(0, Math.round(slotPinchStart.current.initialPosY - deltaY * 0.55))
       );
       setSlotPositionsY((prev) => {
         const next = [...prev];
@@ -1728,7 +1728,7 @@ export default function PhotoStripStudio({
                   setSlotPositionsY((prev) => {
                     const next = [...prev];
                     const curr = typeof next[slotIdx] === 'number' ? next[slotIdx] : 50;
-                    next[slotIdx] = Math.min(100, Math.max(0, curr + (e.deltaY > 0 ? 5 : -5)));
+                    next[slotIdx] = Math.min(100, Math.max(0, curr + (e.deltaY > 0 ? -5 : 5)));
                     return next;
                   });
                 } else {
@@ -2443,7 +2443,7 @@ export default function PhotoStripStudio({
                             setSlotPositionsY((prev) => {
                               const next = [...prev];
                               const curr = typeof next[idx] === 'number' ? next[idx] : 50;
-                              next[idx] = Math.min(100, Math.max(0, curr + (e.deltaY > 0 ? 5 : -5)));
+                              next[idx] = Math.min(100, Math.max(0, curr + (e.deltaY > 0 ? -5 : 5)));
                               return next;
                             });
                           } else {
