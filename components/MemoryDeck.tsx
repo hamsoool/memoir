@@ -7,7 +7,7 @@ import PhotoPrint from './PhotoPrint';
 
 interface MemoryDeckProps {
   group: MemoryDeckGroup;
-  columns?: 1 | 2 | 3 | 4;
+  columns?: 1 | 2 | 3 | 4 | 5 | 6;
   onCycleColumns?: () => void;
   onRemove: (id: string) => void;
   onRetry: (id: string) => void;
@@ -279,13 +279,17 @@ export default function MemoryDeck({
         /* When Separated / Spread Out */
         <div
           className={`grid ${
-            columns === 4
-              ? 'grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-1.5 sm:gap-3'
+            columns === 1
+              ? 'grid-cols-1 max-w-xl mx-auto gap-4 sm:gap-6'
+              : columns === 2
+              ? 'grid-cols-2 gap-3 sm:gap-5'
               : columns === 3
-              ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3.5'
-              : columns === 1
-              ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-5 max-w-xl mx-auto'
-              : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4.5'
+              ? 'grid-cols-3 gap-2.5 sm:gap-4'
+              : columns === 4
+              ? 'grid-cols-4 gap-2 sm:gap-3.5'
+              : columns === 5
+              ? 'grid-cols-5 gap-2 sm:gap-3'
+              : 'grid-cols-6 gap-1.5 sm:gap-2.5'
           } animate-fade-in p-1.5 sm:p-4 bg-paper/40 rounded-sm border border-line/50`}
         >
           {items.map((item, i) => (

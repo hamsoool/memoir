@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-export type GridColumns = 1 | 2 | 3 | 4;
+export type GridColumns = 1 | 2 | 3 | 4 | 5 | 6;
 
 const STORAGE_KEY = 'memoir_mobile_columns';
 
@@ -18,18 +18,39 @@ export function usePinchGrid() {
     columnsRef.current = columns;
   }, [columns]);
 
-  // Load persisted column preference on mount
+  // Load persisted column preference on mount, clamped to screen capabilities
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved && (saved === '1' || saved === '2' || saved === '3' || saved === '4')) {
-        const val = Number(saved) as GridColumns;
-        setColumnsState(val);
-        columnsRef.current = val;
+      if (saved) {
+        const val = Number(saved);
+        const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+        const maxCols = isDesktop ? 6 : 4;
+        if (val >= 1 && val <= maxCols) {
+          const colVal = val as GridColumns;
+          setColumnsState(colVal);
+          columnsRef.current = colVal;
+        } else if (val > maxCols) {
+          setColumnsState(maxCols);
+          columnsRef.current = maxCols;
+        }
       }
     } catch {
       // Ignore storage errors
     }
+  }, []);
+
+  // Clamp columns on viewport resize if transitioning from desktop to mobile
+  useEffect(() => {
+    function handleResize() {
+      const isDesktop = window.innerWidth >= 768;
+      if (!isDesktop && columnsRef.current > 4) {
+        setColumnsState(4);
+        columnsRef.current = 4;
+      }
+    }
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const showToast = useCallback((msg: string) => {
@@ -61,7 +82,9 @@ export function usePinchGrid() {
 
   const cycleColumns = useCallback(() => {
     setColumnsState((prev) => {
-      const next: GridColumns = prev === 1 ? 2 : prev === 2 ? 3 : prev === 3 ? 4 : 1;
+      const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+      const maxCols = isDesktop ? 6 : 4;
+      const next: GridColumns = prev >= maxCols ? 1 : ((prev + 1) as GridColumns);
       columnsRef.current = next;
       try {
         localStorage.setItem(STORAGE_KEY, String(next));
@@ -139,6 +162,8 @@ export function usePinchGrid() {
 
     function commitPinch(scale: number) {
       const currentCols = columnsRef.current;
+      const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+      const maxCols = isDesktop ? 6 : 4;
 
       // Pinch-Out (scale > 1.15): Zoom IN -> larger photos -> fewer columns (e.g. 4 -> 3 -> 2 -> 1)
       if (scale > 1.15) {
@@ -150,9 +175,9 @@ export function usePinchGrid() {
           return;
         }
       }
-      // Pinch-In (scale < 0.85): Zoom OUT -> smaller photos -> more columns (e.g. 1 -> 2 -> 3 -> 4)
+      // Pinch-In (scale < 0.85): Zoom OUT -> smaller photos -> more columns
       else if (scale < 0.85) {
-        if (currentCols < 4) {
+        if (currentCols < maxCols) {
           const nextCols = (currentCols + 1) as GridColumns;
           resetTransformWithAnimation(() => {
             setColumns(nextCols);
