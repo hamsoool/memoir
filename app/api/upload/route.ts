@@ -51,6 +51,16 @@ export async function POST(request: Request) {
       // Compute MD5 checksum of file contents to check for duplicates
       const md5 = crypto.createHash('md5').update(buffer).digest('hex');
 
+      const lastModifiedRaw = formData.get('lastModified');
+      let capturedAtIso: string;
+      if (typeof lastModifiedRaw === 'string' && !isNaN(Number(lastModifiedRaw))) {
+        capturedAtIso = new Date(Number(lastModifiedRaw)).toISOString();
+      } else if (file.lastModified) {
+        capturedAtIso = new Date(file.lastModified).toISOString();
+      } else {
+        capturedAtIso = new Date().toISOString();
+      }
+
       // 1. Check if this exact file content already exists in Cloudinary
       const existingAsset = await findDuplicateCloudinaryMedia(md5);
       if (existingAsset) {
@@ -62,15 +72,17 @@ export async function POST(request: Request) {
           url: existingAsset.url,
           isDuplicate: true,
           message: 'This file is already preserved in Memoir.',
+          capturedAt: existingAsset.capturedAt || existingAsset.createdAt,
         });
       }
 
-      // 2. Fresh upload: save with md5 checksum as publicId and track original name in context
+      // 2. Fresh upload: save with md5 checksum as publicId and track original name & capture time in context
       const result = await uploadBufferToCloudinary(buffer, {
         resourceType: 'auto',
         publicId: md5,
         context: {
           original_name: file.name,
+          captured_at: capturedAtIso,
         },
       });
 
@@ -93,6 +105,7 @@ export async function POST(request: Request) {
         ok: true,
         key: result.public_id,
         url: result.secure_url,
+        capturedAt: capturedAtIso,
       });
     }
 

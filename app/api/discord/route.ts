@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { sendBatchToDiscord, DiscordNotifyOptions } from '@/lib/discord';
 
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {

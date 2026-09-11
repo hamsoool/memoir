@@ -43,6 +43,7 @@ export async function uploadBufferToCloudinary(
         public_id: options.publicId,
         overwrite: false,
         context: options.context,
+        image_metadata: true,
       },
       (error, result) => {
         if (error || !result) {
@@ -92,8 +93,55 @@ export interface CloudinaryAsset {
   format?: string;
   kind: 'image' | 'video';
   createdAt: string;
+  capturedAt?: string;
   name: string;
   isTrashed?: boolean;
+}
+
+/**
+ * Extracts and normalizes the capture / creation date of a media asset.
+ * Prioritizes:
+ * 1. EXIF DateTimeOriginal / CreateDate from image_metadata (camera timestamp)
+ * 2. Custom context `captured_at` (populated from client file.lastModified on upload)
+ * 3. Asset upload created_at timestamp
+ */
+export function parseCaptureDate(
+  contextCapturedAt?: string,
+  imageMetadata?: Record<string, any>,
+  fallbackCreatedAt?: string
+): string {
+  if (imageMetadata && typeof imageMetadata === 'object') {
+    const rawExif =
+      imageMetadata.DateTimeOriginal ||
+      imageMetadata.CreateDate ||
+      imageMetadata['Date/Time Original'] ||
+      imageMetadata.DateTime;
+
+    if (typeof rawExif === 'string' && rawExif.trim()) {
+      // EXIF standard date format: "YYYY:MM:DD HH:MM:SS" or "YYYY:MM:DD"
+      const normalized = rawExif.trim().replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3');
+      const parsed = new Date(normalized);
+      if (!isNaN(parsed.getTime())) {
+        return parsed.toISOString();
+      }
+    }
+  }
+
+  if (contextCapturedAt && typeof contextCapturedAt === 'string') {
+    const parsed = new Date(contextCapturedAt);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+  }
+
+  if (fallbackCreatedAt && typeof fallbackCreatedAt === 'string') {
+    const parsed = new Date(fallbackCreatedAt);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+  }
+
+  return new Date().toISOString();
 }
 
 /**
@@ -123,6 +171,7 @@ export async function getCloudinaryMedia(customFolder?: string): Promise<{
         .expression(`folder:${folder}/* OR folder:${folder}`)
         .with_field('tags')
         .with_field('context')
+        .with_field('image_metadata')
         .sort_by('created_at', 'desc')
         .max_results(500);
 
@@ -148,10 +197,16 @@ export async function getCloudinaryMedia(customFolder?: string): Promise<{
         created_at?: string;
         filename?: string;
         tags?: string[];
-        context?: { custom?: { original_name?: string } };
+        context?: { custom?: { original_name?: string; captured_at?: string } };
+        image_metadata?: Record<string, any>;
       }) => {
         const rawName = r.filename || r.public_id.split('/').pop() || 'memory';
         const isTrashed = Array.isArray(r.tags) && r.tags.includes('trash');
+        const capturedAt = parseCaptureDate(
+          r.context?.custom?.captured_at,
+          r.image_metadata,
+          r.created_at
+        );
         return {
           publicId: r.public_id,
           url: r.secure_url || r.url || '',
@@ -159,6 +214,7 @@ export async function getCloudinaryMedia(customFolder?: string): Promise<{
           format: r.format,
           kind: r.resource_type === 'video' ? 'video' : 'image',
           createdAt: r.created_at || new Date().toISOString(),
+          capturedAt,
           name: r.context?.custom?.original_name || (r.format ? `${rawName}.${r.format}` : rawName),
           isTrashed,
         };
@@ -187,6 +243,8 @@ export async function getCloudinaryMedia(customFolder?: string): Promise<{
             prefix: `${folder}/`,
             resource_type: resourceType,
             tags: true,
+            context: true,
+            image_metadata: true,
             max_results: 500,
             next_cursor: cursor,
           });
@@ -221,9 +279,16 @@ export async function getCloudinaryMedia(customFolder?: string): Promise<{
         resource_type?: string;
         created_at?: string;
         tags?: string[];
+        context?: { custom?: { original_name?: string; captured_at?: string } };
+        image_metadata?: Record<string, any>;
       }) => {
         const rawName = r.public_id.split('/').pop() || 'memory';
         const isTrashed = Array.isArray(r.tags) && r.tags.includes('trash');
+        const capturedAt = parseCaptureDate(
+          r.context?.custom?.captured_at,
+          r.image_metadata,
+          r.created_at
+        );
         return {
           publicId: r.public_id,
           url: r.secure_url || r.url || '',
@@ -231,7 +296,8 @@ export async function getCloudinaryMedia(customFolder?: string): Promise<{
           format: r.format,
           kind: r.resource_type === 'video' ? 'video' : 'image',
           createdAt: r.created_at || new Date().toISOString(),
-          name: r.format ? `${rawName}.${r.format}` : rawName,
+          capturedAt,
+          name: r.context?.custom?.original_name || (r.format ? `${rawName}.${r.format}` : rawName),
           isTrashed,
         };
       }
@@ -239,7 +305,7 @@ export async function getCloudinaryMedia(customFolder?: string): Promise<{
 
     items.sort(
       (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        new Date(b.capturedAt || b.createdAt).getTime() - new Date(a.capturedAt || a.createdAt).getTime()
     );
 
     const totalBytes = items.reduce((sum, item) => sum + item.bytes, 0);

@@ -51,7 +51,8 @@ export interface MemoryDeckGroup {
 export function groupMemories(
   items: import('./types').UploadItem[],
   sortField: 'date' | 'size' | 'type',
-  sortOrder: 'desc' | 'asc'
+  sortOrder: 'desc' | 'asc',
+  dateGrouping: 'month' | 'day' = 'month'
 ): MemoryDeckGroup[] {
   if (items.length === 0) return [];
 
@@ -60,10 +61,15 @@ export function groupMemories(
   for (const item of items) {
     let key = '';
     if (sortField === 'date') {
-      if (item.createdAt) {
-        const d = new Date(item.createdAt);
+      const rawDate = item.capturedAt || item.createdAt;
+      if (rawDate) {
+        const d = new Date(rawDate);
         if (!isNaN(d.getTime())) {
-          key = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+          if (dateGrouping === 'day') {
+            key = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+          } else {
+            key = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+          }
         } else {
           key = 'Undated';
         }
@@ -93,8 +99,8 @@ export function groupMemories(
 
   for (const [title, groupItems] of map.entries()) {
     groupItems.sort((a, b) => {
-      const timeA = new Date(a.createdAt || 0).getTime();
-      const timeB = new Date(b.createdAt || 0).getTime();
+      const timeA = new Date(a.capturedAt || a.createdAt || 0).getTime();
+      const timeB = new Date(b.capturedAt || b.createdAt || 0).getTime();
       const sizeA = a.bytes || a.file?.size || 0;
       const sizeB = b.bytes || b.file?.size || 0;
 
@@ -125,8 +131,8 @@ export function groupMemories(
   // Sort groups themselves based on date / preference
   if (sortField === 'date') {
     groups.sort((a, b) => {
-      const timeA = new Date(a.items[0]?.createdAt || 0).getTime();
-      const timeB = new Date(b.items[0]?.createdAt || 0).getTime();
+      const timeA = new Date(a.items[0]?.capturedAt || a.items[0]?.createdAt || 0).getTime();
+      const timeB = new Date(b.items[0]?.capturedAt || b.items[0]?.createdAt || 0).getTime();
       return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
     });
   } else if (sortField === 'type') {

@@ -597,7 +597,7 @@ export default function PhotoLightbox({
               {displayName}
             </h3>
             <p className="text-[11px] text-ink/50 mt-0.5">
-              Captured {formatDate(item.createdAt)}
+              Captured {formatDate(item.capturedAt || item.createdAt)}
             </p>
           </div>
 

@@ -238,7 +238,7 @@ export default function PhotoPrint({
 
         {/* Date tracker stamped on the photo */}
         <div className="flex items-center justify-between font-stamp text-[9px] sm:text-[10px] text-ink/50 border-t border-line/40 pt-0.5 sm:pt-1">
-          <span>{formatDate(item.createdAt)}</span>
+          <span>{formatDate(item.capturedAt || item.createdAt)}</span>
           <span className="uppercase text-[8px] sm:text-[9px] text-ink/40 tracking-wider">
             {item.kind}
           </span>

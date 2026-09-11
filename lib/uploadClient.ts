@@ -16,6 +16,9 @@ export function uploadFile(
     const xhr = new XMLHttpRequest();
     const formData = new FormData();
     formData.append('file', file);
+    if (file.lastModified) {
+      formData.append('lastModified', String(file.lastModified));
+    }
     if (skipDiscord) {
       formData.append('skipDiscord', 'true');
     }

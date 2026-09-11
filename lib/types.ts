@@ -13,6 +13,7 @@ export interface UploadItem {
   bytes?: number;
   name?: string;
   createdAt?: string;
+  capturedAt?: string;
   isTrashed?: boolean;
 }
 
@@ -21,6 +22,7 @@ export interface UploadResponse {
   ok: boolean;
   key?: string;
   url?: string;
+  capturedAt?: string;
   error?: string;
   mock?: boolean;
   isDuplicate?: boolean;

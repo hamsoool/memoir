@@ -2,6 +2,13 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { UploadItem } from '@/lib/types';
+import {
+  loadPhotoStripDraft,
+  savePhotoStripDraft,
+  clearPhotoStripDraft,
+  updateDraftWasOpen,
+  isDraftMeaningful,
+} from '@/lib/photoStripStorage';
 
 export type StripLayoutId =
   | 'single-1'
@@ -296,6 +303,8 @@ export default function PhotoStripStudio({
   const [slotPhotoIds, setSlotPhotoIds] = useState<(string | null)[]>([]);
   // Zoom scale per slot (default 1.0 = 100%, clamped between 0.75x and 2.5x)
   const [slotZooms, setSlotZooms] = useState<number[]>([]);
+  // Vertical position offset per slot (0 = top, 50 = center midpoint, 100 = bottom)
+  const [slotPositionsY, setSlotPositionsY] = useState<number[]>([]);
   const slotPinchStart = useRef<{ slotIdx: number; dist: number; initialZoom: number } | null>(null);
 
   // Picker drawer state: which slot index is currently choosing a photo
@@ -309,7 +318,7 @@ export default function PhotoStripStudio({
   const touchStartPos = useRef<{ x: number; y: number } | null>(null);
   const [touchDraggingSlotIndex, setTouchDraggingSlotIndex] = useState<number | null>(null);
   const [touchCurrentPos, setTouchCurrentPos] = useState<{ x: number; y: number } | null>(null);
-  const [slotToSwapIndex, setSlotToSwapIndex] = useState<number | null>(null);
+  const [activeRemoveSlotIdx, setActiveRemoveSlotIdx] = useState<number | null>(null);
 
   // Custom text configuration
   const [headerText, setHeaderText] = useState('MEMOIR PHOTOBOOTH');
@@ -330,28 +339,244 @@ export default function PhotoStripStudio({
     [slotPhotoIds]
   );
 
-  // When opened, reset to Step 1 (Style), initialize slots, and set default date to current day
+  // Draft caching & auto-restore tracking
+  const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
+  const isInitialOpenRef = useRef(true);
+  const activeSlotPickerIndexRef = useRef<number | null>(null);
+  activeSlotPickerIndexRef.current = activeSlotPickerIndex;
+  const handleCancelPickerRef = useRef<() => void>(() => {});
+
+  // Reset all fields to clean defaults and clear cached draft
+  const resetToCleanDefaults = useCallback(() => {
+    clearPhotoStripDraft();
+    setLayoutId('classic-4');
+    setThemeId('lovely');
+    setFilterId('original');
+    setStampId('heart');
+    setStudioStep('style');
+    setIsMobilePreviewExpanded(false);
+    setIsMobilePreviewVisible(false);
+    setHeaderText('MEMOIR PHOTOBOOTH');
+    setShowHeader(false);
+    setPrimaryFooter('together since 01/07/26');
+    setSecondaryFooter('captured with love');
+    setShowDate(true);
+    setCustomDate(getTodayFormattedDate());
+    const defaultSlots = new Array(4).fill(null);
+    for (let i = 0; i < 4; i++) {
+      if (preselectedIds[i]) defaultSlots[i] = preselectedIds[i];
+    }
+    setSlotPhotoIds(defaultSlots);
+    setSlotZooms(new Array(4).fill(1));
+    setSlotPositionsY(new Array(4).fill(50));
+    setHasRestoredDraft(false);
+    setIsThemeRevealed(false);
+    setIsPhotosSubRevealed(false);
+    setIsNoteSubRevealed(false);
+  }, [preselectedIds]);
+
+  // Gracefully close studio and mark wasOpen as false
+  const handleCloseStudio = useCallback(() => {
+    updateDraftWasOpen(false);
+    onClose();
+  }, [onClose]);
+
+  // When opened, restore draft if one exists, otherwise initialize clean defaults
   useEffect(() => {
-    if (isOpen) {
-      setStudioStep('style');
-      setIsMobilePreviewExpanded(false);
-      setIsMobilePreviewVisible(false);
-      setCustomDate(getTodayFormattedDate());
-      setSlotPhotoIds((prev) => {
-        const targetSize = activeLayout.slots;
-        const next = new Array(targetSize).fill(null);
+    if (!isOpen) {
+      isInitialOpenRef.current = true;
+      return;
+    }
+
+    if (isInitialOpenRef.current) {
+      isInitialOpenRef.current = false;
+      const draft = loadPhotoStripDraft();
+
+      if (draft && isDraftMeaningful(draft)) {
+        setLayoutId(draft.layoutId || 'classic-4');
+        setThemeId(draft.themeId || 'lovely');
+        setFilterId(draft.filterId || 'original');
+        setStampId(draft.stampId || 'heart');
+        setStudioStep(draft.studioStep || 'style');
+        setHeaderText(draft.headerText || 'MEMOIR PHOTOBOOTH');
+        setShowHeader(draft.showHeader ?? false);
+        setPrimaryFooter(draft.primaryFooter ?? 'together since 01/07/26');
+        setSecondaryFooter(draft.secondaryFooter ?? 'captured with love');
+        setShowDate(draft.showDate ?? true);
+        setCustomDate(draft.customDate || getTodayFormattedDate());
+
+        const layoutDef = LAYOUTS.find((l) => l.id === draft.layoutId) || LAYOUTS[3];
+        const targetSize = layoutDef.slots;
+        const restoredSlots = new Array(targetSize).fill(null);
         for (let i = 0; i < targetSize; i++) {
-          if (prev[i]) {
-            next[i] = prev[i];
+          if (draft.slotPhotoIds[i]) {
+            restoredSlots[i] = draft.slotPhotoIds[i];
           } else if (preselectedIds[i]) {
-            next[i] = preselectedIds[i];
+            restoredSlots[i] = preselectedIds[i];
           }
         }
-        return next;
-      });
-      setSlotZooms(new Array(activeLayout.slots).fill(1));
+        setSlotPhotoIds(restoredSlots);
+
+        const restoredZooms = new Array(targetSize).fill(1);
+        for (let i = 0; i < targetSize; i++) {
+          if (typeof draft.slotZooms?.[i] === 'number') {
+            restoredZooms[i] = draft.slotZooms[i];
+          }
+        }
+        setSlotZooms(restoredZooms);
+
+        const restoredPositionsY = new Array(targetSize).fill(50);
+        for (let i = 0; i < targetSize; i++) {
+          if (typeof draft.slotPositionsY?.[i] === 'number') {
+            restoredPositionsY[i] = draft.slotPositionsY[i];
+          }
+        }
+        setSlotPositionsY(restoredPositionsY);
+        setHasRestoredDraft(true);
+
+        // Adaptive reveals based on restored configuration
+        if (draft.studioStep !== 'style' || draft.themeId) {
+          setIsThemeRevealed(true);
+        }
+        if (draft.studioStep === 'photos' || draft.filterId !== 'original') {
+          setIsPhotosSubRevealed(true);
+        }
+        if (draft.studioStep === 'note' || draft.stampId !== 'heart') {
+          setIsNoteSubRevealed(true);
+        }
+      } else {
+        resetToCleanDefaults();
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, preselectedIds, resetToCleanDefaults]);
+
+  // Continuous auto-save draft to localStorage whenever editing
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const timer = setTimeout(() => {
+      savePhotoStripDraft({
+        layoutId,
+        themeId,
+        filterId,
+        stampId,
+        studioStep,
+        slotPhotoIds,
+        slotZooms,
+        slotPositionsY,
+        headerText,
+        showHeader,
+        primaryFooter,
+        secondaryFooter,
+        showDate,
+        customDate,
+        wasOpen: true,
+      });
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [
+    isOpen,
+    layoutId,
+    themeId,
+    filterId,
+    stampId,
+    studioStep,
+    slotPhotoIds,
+    slotZooms,
+    slotPositionsY,
+    headerText,
+    showHeader,
+    primaryFooter,
+    secondaryFooter,
+    showDate,
+    customDate,
+  ]);
+
+  // Flush latest draft to localStorage when PWA is backgrounded, minimized, or page unloads
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const flushDraft = () => {
+      savePhotoStripDraft({
+        layoutId,
+        themeId,
+        filterId,
+        stampId,
+        studioStep,
+        slotPhotoIds,
+        slotZooms,
+        slotPositionsY,
+        headerText,
+        showHeader,
+        primaryFooter,
+        secondaryFooter,
+        showDate,
+        customDate,
+        wasOpen: true,
+      });
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        flushDraft();
+      }
+    };
+
+    window.addEventListener('beforeunload', flushDraft);
+    window.addEventListener('pagehide', flushDraft);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('beforeunload', flushDraft);
+      window.removeEventListener('pagehide', flushDraft);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [
+    isOpen,
+    layoutId,
+    themeId,
+    filterId,
+    stampId,
+    studioStep,
+    slotPhotoIds,
+    slotZooms,
+    slotPositionsY,
+    headerText,
+    showHeader,
+    primaryFooter,
+    secondaryFooter,
+    showDate,
+    customDate,
+  ]);
+
+  // Intercept PWA back gesture and hardware back button via History API
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const stateToken = 'strip-studio-' + Date.now();
+    window.history.pushState({ modal: 'photo-strip-studio', token: stateToken }, '');
+
+    const handlePopState = () => {
+      // If photo picker drawer was open inside the studio, close only the drawer
+      if (activeSlotPickerIndexRef.current !== null) {
+        handleCancelPickerRef.current();
+        window.history.pushState({ modal: 'photo-strip-studio', token: stateToken }, '');
+      } else {
+        updateDraftWasOpen(false);
+        onClose();
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      if (window.history.state?.modal === 'photo-strip-studio' && window.history.state?.token === stateToken) {
+        window.history.back();
+      }
+    };
+  }, [isOpen, onClose]);
 
   // Staged adaptive reveals: secondary sections only appear if anything in that step has been tapped
   useEffect(() => {
@@ -431,6 +656,15 @@ export default function PhotoStripStudio({
       return next;
     });
 
+    setSlotPositionsY((prev) => {
+      const targetSize = chosenLayout.slots;
+      const next = new Array(targetSize).fill(50);
+      for (let i = 0; i < targetSize; i++) {
+        if (typeof prev[i] === 'number') next[i] = prev[i];
+      }
+      return next;
+    });
+
     requestAnimationFrame(() => {
       updatePreviewScale();
     });
@@ -466,13 +700,14 @@ export default function PhotoStripStudio({
   };
 
   // Cancel photo picker: restore slots to pre-drawer snapshot
-  const handleCancelPicker = () => {
+  const handleCancelPicker = useCallback(() => {
     if (drawerInitialSlotIds.length > 0) {
       setSlotPhotoIds([...drawerInitialSlotIds]);
     }
     setActiveSlotPickerIndex(null);
     setSelectingPhotoId(null);
-  };
+  }, [drawerInitialSlotIds]);
+  handleCancelPickerRef.current = handleCancelPicker;
 
   // Done photo picker: confirm current selection
   const handleDonePicker = () => {
@@ -499,13 +734,13 @@ export default function PhotoStripStudio({
         if (activeSlotPickerIndex !== null) {
           handleCancelPicker();
         } else {
-          onClose();
+          handleCloseStudio();
         }
       }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [isOpen, activeSlotPickerIndex, onClose, drawerInitialSlotIds]);
+  }, [isOpen, activeSlotPickerIndex, handleCloseStudio, handleCancelPicker]);
 
   // Map slot IDs to photo objects
   const slotItems = useMemo(() => {
@@ -562,6 +797,7 @@ export default function PhotoStripStudio({
   // Handler: Remove photo from slot
   const handleRemovePhotoFromSlot = (slotIdx: number, e?: React.MouseEvent) => {
     e?.stopPropagation();
+    setActiveRemoveSlotIdx(null);
     setSlotPhotoIds((prev) => {
       const next = [...prev];
       next[slotIdx] = null;
@@ -570,6 +806,11 @@ export default function PhotoStripStudio({
     setSlotZooms((prev) => {
       const next = [...prev];
       next[slotIdx] = 1;
+      return next;
+    });
+    setSlotPositionsY((prev) => {
+      const next = [...prev];
+      next[slotIdx] = 50;
       return next;
     });
   };
@@ -585,30 +826,86 @@ export default function PhotoStripStudio({
     });
   };
 
-  // Auto-fill slots with newest photos
+  // Auto-fill slots with random photos from uploaded memories
   const handleAutoFill = () => {
     setIsPhotosSubRevealed(true);
-    setSlotPhotoIds(() => {
-      const next = new Array(activeLayout.slots).fill(null);
-      for (let i = 0; i < activeLayout.slots && i < photoItems.length; i++) {
-        next[i] = photoItems[i].id;
-      }
-      return next;
-    });
+    if (photoItems.length === 0) return;
+
+    // Pick random photos from available uploaded memories using Fisher-Yates
+    const pool = [...photoItems];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+
+    const nextIds: (string | null)[] = new Array(activeLayout.slots).fill(null);
+    for (let i = 0; i < activeLayout.slots && i < pool.length; i++) {
+      nextIds[i] = pool[i].id;
+    }
+
+    setSlotPhotoIds(nextIds);
+    setSlotZooms(new Array(activeLayout.slots).fill(1));
+    setSlotPositionsY(new Array(activeLayout.slots).fill(50));
+    setActiveRemoveSlotIdx(null);
   };
 
-  // Randomize / shuffle slots
+  // Shuffle the order of photos currently in the photo strip slots
   const handleShuffle = () => {
     setIsPhotosSubRevealed(true);
-    if (photoItems.length === 0) return;
-    const shuffled = [...photoItems].sort(() => Math.random() - 0.5);
-    setSlotPhotoIds(() => {
-      const next = new Array(activeLayout.slots).fill(null);
-      for (let i = 0; i < activeLayout.slots && i < shuffled.length; i++) {
-        next[i] = shuffled[i].id;
+    setActiveRemoveSlotIdx(null);
+
+    // Find indices of slots that currently contain a photo
+    const filledIndices: number[] = [];
+    slotPhotoIds.forEach((id, idx) => {
+      if (id !== null) {
+        filledIndices.push(idx);
       }
-      return next;
     });
+
+    if (filledIndices.length <= 1) {
+      // If the strip is empty, auto-fill with random memories so it's not a no-op
+      if (filledIndices.length === 0 && photoItems.length > 0) {
+        handleAutoFill();
+      }
+      return;
+    }
+
+    // Extract current photo data (id, zoom, posY) for filled slots
+    const itemsToShuffle = filledIndices.map((idx) => ({
+      id: slotPhotoIds[idx],
+      zoom: slotZooms[idx] ?? 1,
+      posY: slotPositionsY[idx] ?? 50,
+    }));
+
+    // Fisher-Yates shuffle with a guarantee to change order if multiple items
+    const shuffled = [...itemsToShuffle];
+    let attempts = 0;
+    do {
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      attempts++;
+    } while (
+      attempts < 5 &&
+      shuffled.length > 1 &&
+      shuffled.every((item, i) => item.id === itemsToShuffle[i].id)
+    );
+
+    // Apply shuffled items back to the filled slots, preserving individual zoom & vertical positions
+    const nextPhotoIds = [...slotPhotoIds];
+    const nextZooms = [...slotZooms];
+    const nextPositionsY = [...slotPositionsY];
+
+    filledIndices.forEach((slotIdx, i) => {
+      nextPhotoIds[slotIdx] = shuffled[i].id;
+      nextZooms[slotIdx] = shuffled[i].zoom;
+      nextPositionsY[slotIdx] = shuffled[i].posY;
+    });
+
+    setSlotPhotoIds(nextPhotoIds);
+    setSlotZooms(nextZooms);
+    setSlotPositionsY(nextPositionsY);
   };
 
   // Clear all slots
@@ -616,6 +913,8 @@ export default function PhotoStripStudio({
     setIsPhotosSubRevealed(true);
     setSlotPhotoIds(new Array(activeLayout.slots).fill(null));
     setSlotZooms(new Array(activeLayout.slots).fill(1));
+    setSlotPositionsY(new Array(activeLayout.slots).fill(50));
+    setActiveRemoveSlotIdx(null);
   };
 
   // Relocate or swap photos between two slot indices (preserves individual zoom settings)
@@ -637,27 +936,27 @@ export default function PhotoStripStudio({
       next[toIdx] = z1;
       return next;
     });
-    setSlotToSwapIndex(null);
+    setSlotPositionsY((prev) => {
+      const next = [...prev];
+      const p1 = typeof next[fromIdx] === 'number' ? next[fromIdx] : 50;
+      const p2 = typeof next[toIdx] === 'number' ? next[toIdx] : 50;
+      next[fromIdx] = p2;
+      next[toIdx] = p1;
+      return next;
+    });
+    setActiveRemoveSlotIdx(null);
   };
 
-  // Slot click handler: Supports Tap-to-Swap for mobile & desktop, or opens photo picker
+  // Slot click handler: Tapping a filled photo reveals center X button to remove it
   const handleSlotClick = (slotIdx: number) => {
     setIsPhotosSubRevealed(true);
     if (touchDraggingSlotIndex !== null || draggedSlotIndex !== null) return;
     const hasPhoto = Boolean(slotPhotoIds[slotIdx]);
 
-    if (slotToSwapIndex !== null) {
-      if (slotToSwapIndex === slotIdx) {
-        setSlotToSwapIndex(null);
-      } else {
-        handleSwapSlots(slotToSwapIndex, slotIdx);
-      }
-      return;
-    }
-
     if (hasPhoto) {
-      setSlotToSwapIndex(slotIdx);
+      setActiveRemoveSlotIdx((prev) => (prev === slotIdx ? null : slotIdx));
     } else {
+      setActiveRemoveSlotIdx(null);
       handleOpenPhotoPicker(slotIdx);
     }
   };
@@ -761,7 +1060,7 @@ export default function PhotoStripStudio({
         }
         if (touchDraggingSlotIndex === null) {
           setTouchDraggingSlotIndex(slotIdx);
-          setSlotToSwapIndex(null);
+          setActiveRemoveSlotIdx(null);
         }
         setTouchCurrentPos({ x: touch.clientX, y: touch.clientY });
 
@@ -1030,6 +1329,16 @@ export default function PhotoStripStudio({
             sh = newSh;
           }
 
+          // Apply vertical repositioning from top (0%) to bottom (100%)
+          const posY = typeof slotPositionsY[index] === 'number' ? slotPositionsY[index] : 50;
+          if (posY !== 50) {
+            const maxSlackY = Math.max(0, img.height - sh);
+            if (maxSlackY > 0) {
+              sy = maxSlackY * (posY / 100);
+            }
+          }
+          sy = Math.max(0, Math.min(img.height - sh, sy));
+
           ctx.drawImage(img, sx, sy, sw, sh, px, py, pw, ph);
           ctx.restore();
 
@@ -1166,6 +1475,10 @@ export default function PhotoStripStudio({
       const canvas = await generateStripCanvas();
       const { blob, filename } = await getExportBlob(canvas);
 
+      // Release backing canvas pixel memory
+      canvas.width = 0;
+      canvas.height = 0;
+
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.download = filename;
@@ -1173,7 +1486,15 @@ export default function PhotoStripStudio({
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+
+      // Delay revocation by 2.5s so iOS Safari and Android Chrome have sufficient time to dispatch download
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 2500);
+
+      // Clean up cached draft after successful download
+      clearPhotoStripDraft();
+      setHasRestoredDraft(false);
 
       setIsExporting(false);
       setExportMessage('');
@@ -1194,6 +1515,8 @@ export default function PhotoStripStudio({
 
       const canvas = await generateStripCanvas();
       const { blob, filename } = await getExportBlob(canvas);
+      canvas.width = 0;
+      canvas.height = 0;
 
       setExportMessage('Sending to Discord...');
 
@@ -1231,6 +1554,8 @@ export default function PhotoStripStudio({
 
       setDiscordSuccess(true);
       setExportMessage('Sent photo strip to Discord!');
+      clearPhotoStripDraft();
+      setHasRestoredDraft(false);
       setTimeout(() => {
         setDiscordSuccess(false);
         setExportMessage('');
@@ -1345,8 +1670,7 @@ export default function PhotoStripStudio({
           const isBeingDragged =
             draggedSlotIndex === slotIdx || touchDraggingSlotIndex === slotIdx;
           const isDropTarget = dragOverSlotIndex === slotIdx;
-          const isSwapSelected = slotToSwapIndex === slotIdx;
-          const isSwapCandidate = slotToSwapIndex !== null && slotToSwapIndex !== slotIdx;
+          const isRemoveSelected = activeRemoveSlotIdx === slotIdx;
 
           return (
             <div
@@ -1391,23 +1715,17 @@ export default function PhotoStripStudio({
                   ? 'opacity-30 scale-95 ring-2 ring-rust/60 border-dashed'
                   : isDropTarget
                   ? 'ring-2 ring-rust border-rust bg-rust/20 scale-[1.03] shadow-md z-10'
-                  : isSwapSelected
-                  ? 'ring-2 ring-rust border-rust bg-rust/15 shadow-md scale-[1.02] z-20 animate-pulse'
-                  : isSwapCandidate
-                  ? 'hover:ring-2 hover:ring-rust/50 cursor-pointer'
+                  : isRemoveSelected
+                  ? 'ring-2 ring-rust border-rust shadow-md scale-[1.01] z-20'
                   : ''
               } transition-all duration-200 flex flex-col items-center justify-center overflow-hidden ${
                 !photoSrc ? 'border-dashed opacity-85 hover:opacity-100' : 'border-solid shadow-xs'
               }`}
               title={
                 photoSrc
-                  ? slotToSwapIndex !== null
-                    ? slotToSwapIndex === slotIdx
-                      ? 'Tap to cancel swap selection'
-                      : 'Tap to swap with selected photo'
-                    : 'Drag to swap photo • Tap +/− to zoom'
-                  : slotToSwapIndex !== null
-                  ? 'Tap to move selected photo here'
+                  ? isRemoveSelected
+                    ? 'Tap to cancel removal'
+                    : 'Drag photo up or down to rearrange • Tap to remove'
                   : 'Tap to choose photo'
               }
             >
@@ -1419,34 +1737,33 @@ export default function PhotoStripStudio({
                 </div>
               )}
 
-              {isSwapSelected && (
-                <div className="absolute inset-0 bg-rust/25 border-2 border-rust rounded-[2px] flex flex-col items-center justify-center gap-1 z-30 p-1 pointer-events-auto">
-                  <span className="bg-rust text-paper-light font-stamp text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded-xs shadow-xs text-center leading-tight">
-                    Tap other slot to swap
+              {/* Center Remove X Button Overlay when slot is tapped */}
+              {isInteractive && photoSrc && isRemoveSelected && (
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveRemoveSlotIdx(null);
+                  }}
+                  className="absolute inset-0 bg-ink/50 backdrop-blur-[1px] rounded-[2px] flex flex-col items-center justify-center gap-1 z-30 p-1 pointer-events-auto animate-fade-in"
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemovePhotoFromSlot(slotIdx, e);
+                      setActiveRemoveSlotIdx(null);
+                    }}
+                    className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-rust hover:bg-rust-dark text-paper-light flex items-center justify-center shadow-lg transition transform active:scale-90 hover:scale-105 border-2 border-paper-light"
+                    title="Remove photo from slot"
+                    aria-label="Remove photo"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                  <span className="font-stamp text-[9px] sm:text-[10px] text-paper-light tracking-wide drop-shadow-xs pointer-events-none">
+                    Remove
                   </span>
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSlotToSwapIndex(null);
-                        handleOpenPhotoPicker(slotIdx);
-                      }}
-                      className="bg-paper text-ink font-display text-[9px] px-1.5 py-0.5 rounded-2xs border border-line shadow-xs hover:bg-paper-light transition"
-                    >
-                      Change
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSlotToSwapIndex(null);
-                      }}
-                      className="bg-ink/85 text-paper-light font-display text-[9px] px-1.5 py-0.5 rounded-2xs shadow-xs hover:bg-ink transition"
-                    >
-                      Cancel
-                    </button>
-                  </div>
                 </div>
               )}
 
@@ -1458,9 +1775,11 @@ export default function PhotoStripStudio({
                       alt={`Slot ${slotIdx + 1}`}
                       style={{
                         filter: getFilterStyle(filterId),
+                        objectPosition: `50% ${slotPositionsY[slotIdx] ?? 50}%`,
                         transform: `scale(${slotZooms[slotIdx] || 1})`,
+                        transformOrigin: `50% ${slotPositionsY[slotIdx] ?? 50}%`,
                       }}
-                      className="w-full h-full object-cover transition-transform duration-200 pointer-events-none select-none"
+                      className="w-full h-full object-cover transition-all duration-150 pointer-events-none select-none"
                     />
                   </div>
 
@@ -1468,74 +1787,6 @@ export default function PhotoStripStudio({
                     <span className="absolute bottom-1 right-1.5 font-stamp text-[9px] text-[#E5B560] drop-shadow-xs pointer-events-none">
                       0{slotIdx + 1}A
                     </span>
-                  )}
-
-                  {isInteractive && !isSwapSelected && (
-                    <div className="absolute inset-0 bg-ink/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-1.5 p-1">
-                      {/* Drag Move Badge */}
-                      <span
-                        className="font-stamp text-[9px] text-paper-light bg-ink/80 px-1.5 py-0.5 rounded-xs flex items-center gap-1 pointer-events-none shadow-xs"
-                        title="Drag to swap or relocate"
-                      >
-                        <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <polyline points="5 9 2 12 5 15"/>
-                          <polyline points="9 5 12 2 15 5"/>
-                          <polyline points="15 19 12 22 9 19"/>
-                          <polyline points="19 9 22 12 19 15"/>
-                          <line x1="2" y1="12" x2="22" y2="12"/>
-                          <line x1="12" y1="2" x2="12" y2="22"/>
-                        </svg>
-                        <span>Move</span>
-                      </span>
-
-                      {/* Tactile Zoom In / Zoom Out Pill */}
-                      <div
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-0.5 bg-ink/90 px-1.5 py-0.5 rounded-full border border-paper-light/30 text-paper-light shadow-md select-none"
-                      >
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleZoomSlot(slotIdx, -0.15);
-                          }}
-                          disabled={(slotZooms[slotIdx] || 1) <= 0.75}
-                          title="Zoom out"
-                          className="w-4 h-4 flex items-center justify-center hover:text-rust disabled:opacity-30 disabled:pointer-events-none font-bold text-xs active:scale-90 transition"
-                        >
-                          −
-                        </button>
-                        <span className="font-stamp text-[8px] min-w-[26px] text-center font-medium">
-                          {Math.round((slotZooms[slotIdx] || 1) * 100)}%
-                        </span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleZoomSlot(slotIdx, 0.15);
-                          }}
-                          disabled={(slotZooms[slotIdx] || 1) >= 2.5}
-                          title="Zoom in"
-                          className="w-4 h-4 flex items-center justify-center hover:text-rust disabled:opacity-30 disabled:pointer-events-none font-bold text-xs active:scale-90 transition"
-                        >
-                          +
-                        </button>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemovePhotoFromSlot(slotIdx, e);
-                        }}
-                        title="Remove photo"
-                        className="w-5 h-5 flex items-center justify-center bg-rust text-paper-light rounded-full hover:bg-rust-dark transition shadow-xs active:scale-90"
-                      >
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
                   )}
                 </>
               ) : (
@@ -1642,25 +1893,48 @@ export default function PhotoStripStudio({
               </svg>
             </div>
             <div>
-              <h2 className="font-display font-medium text-ink text-base sm:text-lg leading-none">
-                Photo Strip Studio
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="font-display font-medium text-ink text-base sm:text-lg leading-none">
+                  Memoir Photobooth
+                </h2>
+                {hasRestoredDraft && (
+                  <span className="px-1.5 py-0.5 rounded-2xs text-[9px] font-stamp bg-rust/15 text-rust border border-rust/30 tracking-tight animate-fade-in">
+                    Draft Restored
+                  </span>
+                )}
+              </div>
               <p className="font-display italic text-[11px] sm:text-xs text-ink/65 mt-0.5">
-                Photobooth Keepsake
+                Vintage Photo Strips • Auto-saves as you edit
               </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-ink/60 hover:text-ink hover:bg-ink/5 rounded-xs transition"
-            title="Close Studio (Esc)"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {(hasRestoredDraft || filledSlotsCount > 0) && (
+              <button
+                type="button"
+                onClick={resetToCleanDefaults}
+                className="px-2 py-1 text-ink/65 hover:text-rust hover:bg-rust/10 font-display text-[11px] rounded-xs border border-line/60 transition flex items-center gap-1"
+                title="Discard current draft and start fresh"
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+                <span className="hidden sm:inline">Start Fresh</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleCloseStudio}
+              className="p-1.5 text-ink/60 hover:text-ink hover:bg-ink/5 rounded-xs transition"
+              title="Close Studio (Esc)"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Step Indicator Navigation - 3 Simple Sequential Steps */}
@@ -1726,9 +2000,9 @@ export default function PhotoStripStudio({
                 <span className="font-display italic text-[10px] text-ink/55">
                   ({activeLayout.name})
                 </span>
-                {slotToSwapIndex !== null && (
-                  <span className="font-stamp text-[9px] text-rust bg-rust/10 border border-rust/20 px-1 py-0.5 rounded-2xs animate-pulse">
-                    Tap slot to swap
+                {activeRemoveSlotIdx !== null && (
+                  <span className="font-stamp text-[9px] text-rust bg-rust/10 border border-rust/20 px-1 py-0.5 rounded-2xs">
+                    Slot {activeRemoveSlotIdx + 1} selected
                   </span>
                 )}
               </div>
@@ -1737,20 +2011,38 @@ export default function PhotoStripStudio({
                   type="button"
                   onClick={() => setIsMobilePreviewExpanded(true)}
                   className="px-2 py-1 bg-rust hover:bg-rust-dark text-paper-light font-display text-[11px] rounded-xs shadow-2xs flex items-center gap-1 transition whitespace-nowrap font-medium"
-                  title="Open full interactive preview to arrange photos"
+                  title="Open full photo strip preview"
                 >
-                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="7" y="2" width="10" height="20" rx="1.5" />
+                    <line x1="7" y1="8" x2="17" y2="8" />
+                    <line x1="7" y1="14" x2="17" y2="14" />
                   </svg>
-                  <span>Arrange</span>
+                  <span>View Strip</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsMobilePreviewVisible(!isMobilePreviewVisible)}
-                  className="px-2 py-1 border border-line bg-paper text-ink/70 font-display text-[11px] rounded-xs shadow-2xs hover:text-ink transition whitespace-nowrap"
-                  title={isMobilePreviewVisible ? 'Hide preview strip' : 'Show preview strip'}
+                  className="px-2 py-1 border border-line bg-paper text-ink/75 hover:bg-ink hover:text-paper-light font-display text-[11px] rounded-xs shadow-2xs transition whitespace-nowrap flex items-center gap-1"
+                  title={isMobilePreviewVisible ? 'Hide in-line preview strip' : 'Show in-line preview strip'}
                 >
-                  {isMobilePreviewVisible ? 'Hide' : 'Show'}
+                  {isMobilePreviewVisible ? (
+                    <>
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                        <line x1="1" y1="1" x2="23" y2="23" />
+                      </svg>
+                      <span>Hide</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                      <span>Show</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -2020,7 +2312,7 @@ export default function PhotoStripStudio({
                       type="button"
                       onClick={handleAutoFill}
                       className="px-2 py-1 rounded-xs border border-line bg-paper hover:bg-ink hover:text-paper-light text-ink/75 transition text-[11px] sm:text-xs flex items-center gap-1 shadow-2xs shrink-0 whitespace-nowrap"
-                      title="Fill with our latest memories"
+                      title="Choose random photos from uploaded memories"
                     >
                       <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
@@ -2031,7 +2323,7 @@ export default function PhotoStripStudio({
                       type="button"
                       onClick={handleShuffle}
                       className="px-2 py-1 rounded-xs border border-line bg-paper hover:bg-ink hover:text-paper-light text-ink/75 transition text-[11px] sm:text-xs flex items-center gap-1 shadow-2xs shrink-0 whitespace-nowrap"
-                      title="Shuffle photos"
+                      title="Shuffle the order of photos in the strip"
                     >
                       <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="16 3 21 3 21 8" />
@@ -2057,7 +2349,7 @@ export default function PhotoStripStudio({
                 <div className="bg-paper/70 border border-line/60 rounded-xs p-2 shadow-2xs">
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="font-display text-ink/70">
-                      Selected Photos {slotToSwapIndex !== null && '• Tap target slot to swap'}
+                      Selected Photos {activeRemoveSlotIdx !== null && '• Tap X in center to remove'}
                     </span>
                     <span className="font-stamp text-[11px] text-rust font-medium">
                       {filledSlotsCount} / {activeLayout.slots}
@@ -2084,8 +2376,7 @@ export default function PhotoStripStudio({
                     const isBeingDragged =
                       draggedSlotIndex === idx || touchDraggingSlotIndex === idx;
                     const isDropTarget = dragOverSlotIndex === idx;
-                    const isSwapSelected = slotToSwapIndex === idx;
-                    const isSwapCandidate = slotToSwapIndex !== null && slotToSwapIndex !== idx;
+                    const isRemoveSelected = activeRemoveSlotIdx === idx;
 
                     return (
                       <div
@@ -2112,10 +2403,8 @@ export default function PhotoStripStudio({
                             ? 'opacity-30 scale-95 ring-2 ring-rust/60 border-dashed'
                             : isDropTarget
                             ? 'ring-2 ring-rust border-rust bg-rust/20 scale-[1.02] shadow-md z-10'
-                            : isSwapSelected
-                            ? 'ring-2 ring-rust border-rust bg-rust/15 shadow-md scale-[1.02] z-20 animate-pulse'
-                            : isSwapCandidate
-                            ? 'hover:ring-2 hover:ring-rust/50 cursor-pointer'
+                            : isRemoveSelected
+                            ? 'ring-2 ring-rust border-rust shadow-md scale-[1.01] z-20'
                             : isPickingThis
                             ? 'ring-2 ring-rust border-rust bg-rust/10'
                             : imgSrc
@@ -2124,13 +2413,9 @@ export default function PhotoStripStudio({
                         }`}
                         title={
                           imgSrc
-                            ? slotToSwapIndex !== null
-                              ? slotToSwapIndex === idx
-                                ? 'Tap to cancel swap selection'
-                                : 'Tap to swap with selected photo'
-                              : 'Drag to relocate, or tap to swap'
-                            : slotToSwapIndex !== null
-                            ? 'Tap to move photo here'
+                            ? isRemoveSelected
+                              ? 'Tap to cancel removal'
+                              : 'Tap to remove photo • Drag to swap'
                             : 'Tap to add photo'
                         }
                       >
@@ -2142,34 +2427,33 @@ export default function PhotoStripStudio({
                           </div>
                         )}
 
-                        {isSwapSelected && (
-                          <div className="absolute inset-0 bg-rust/25 border-2 border-rust rounded-xs flex flex-col items-center justify-center gap-1 z-30 p-1 pointer-events-auto">
-                            <span className="bg-rust text-paper-light font-stamp text-[8px] px-1 py-0.5 rounded-2xs shadow-xs text-center leading-tight">
-                              Tap other slot to swap
+                        {/* Center Remove X Button Overlay when slot is tapped */}
+                        {imgSrc && isRemoveSelected && (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveRemoveSlotIdx(null);
+                            }}
+                            className="absolute inset-0 bg-ink/50 backdrop-blur-[1px] rounded-xs flex flex-col items-center justify-center gap-1 z-30 p-1 pointer-events-auto animate-fade-in"
+                          >
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemovePhotoFromSlot(idx, e);
+                                setActiveRemoveSlotIdx(null);
+                              }}
+                              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-rust hover:bg-rust-dark text-paper-light flex items-center justify-center shadow-lg transition transform active:scale-90 hover:scale-105 border-2 border-paper-light"
+                              title="Remove photo from slot"
+                              aria-label="Remove photo"
+                            >
+                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                            <span className="font-stamp text-[9px] text-paper-light tracking-wide drop-shadow-xs pointer-events-none">
+                              Remove
                             </span>
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSlotToSwapIndex(null);
-                                  handleOpenPhotoPicker(idx);
-                                }}
-                                className="bg-paper text-ink font-display text-[9px] px-1.5 py-0.5 rounded-2xs border border-line shadow-xs hover:bg-paper-light transition"
-                              >
-                                Change
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSlotToSwapIndex(null);
-                                }}
-                                className="bg-ink/85 text-paper-light font-display text-[9px] px-1.5 py-0.5 rounded-2xs shadow-xs hover:bg-ink transition"
-                              >
-                                Cancel
-                              </button>
-                            </div>
                           </div>
                         )}
 
@@ -2184,29 +2468,6 @@ export default function PhotoStripStudio({
                             <span className="absolute bottom-1 right-1 bg-ink/75 text-paper-light font-display text-[9px] px-1 rounded-2xs pointer-events-none">
                               Photo {idx + 1}
                             </span>
-                            <div className="absolute inset-0 bg-ink/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-1.5">
-                              <span className="font-display text-[10px] text-paper-light bg-ink/80 px-1.5 py-0.5 rounded-2xs flex items-center gap-1">
-                                <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                  <polyline points="5 9 2 12 5 15"/>
-                                  <polyline points="9 5 12 2 15 5"/>
-                                  <polyline points="15 19 12 22 9 19"/>
-                                  <polyline points="19 9 22 12 19 15"/>
-                                  <line x1="2" y1="12" x2="22" y2="12"/>
-                                  <line x1="12" y1="2" x2="12" y2="22"/>
-                                </svg>
-                                <span>Move</span>
-                              </span>
-                              <button
-                                type="button"
-                                onClick={(e) => handleRemovePhotoFromSlot(idx, e)}
-                                className="w-4 h-4 flex items-center justify-center bg-rust text-paper-light rounded-full hover:bg-rust-dark transition shrink-0"
-                                title="Remove photo"
-                              >
-                                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </div>
                           </>
                         ) : (
                           <div className="text-center p-2 animate-pulse-gentle pointer-events-none">
@@ -2895,23 +3156,18 @@ export default function PhotoStripStudio({
           <div className="flex items-center justify-between px-4 py-3 border-b border-line bg-paper shrink-0 shadow-xs">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-xs bg-rust/10 border border-rust/25 flex items-center justify-center text-rust shrink-0">
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <polyline points="5 9 2 12 5 15"/>
-                  <polyline points="9 5 12 2 15 5"/>
-                  <polyline points="15 19 12 22 9 19"/>
-                  <polyline points="19 9 22 12 19 15"/>
-                  <line x1="2" y1="12" x2="22" y2="12"/>
-                  <line x1="12" y1="2" x2="12" y2="22"/>
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="7" y="2" width="10" height="20" rx="1.5" />
+                  <line x1="7" y1="8" x2="17" y2="8" />
+                  <line x1="7" y1="14" x2="17" y2="14" />
                 </svg>
               </div>
               <div>
                 <h3 className="font-display font-medium text-ink text-sm leading-tight">
-                  Arrange Photo Strip
+                  Photo Strip Preview
                 </h3>
                 <p className="font-display italic text-[11px] text-ink/65 leading-none mt-0.5">
-                  {slotToSwapIndex !== null
-                    ? 'Tap any other slot to swap'
-                    : 'Drag photos to relocate, or tap two photos to swap'}
+                  Drag photos to relocate or swap • Tap a photo to remove
                 </p>
               </div>
             </div>
@@ -2919,7 +3175,7 @@ export default function PhotoStripStudio({
               type="button"
               onClick={() => {
                 setIsMobilePreviewExpanded(false);
-                setSlotToSwapIndex(null);
+                setActiveRemoveSlotIdx(null);
               }}
               className="px-3.5 py-1.5 bg-rust hover:bg-rust-dark text-paper-light font-display font-medium text-xs rounded-xs shadow-print flex items-center gap-1 transition"
             >

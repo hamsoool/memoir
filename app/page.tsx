@@ -15,6 +15,12 @@ import { fileKind, formatBytes, groupMemories, makeId } from '@/lib/format';
 import { usePinchGrid } from '@/lib/usePinchGrid';
 import type { UploadItem } from '@/lib/types';
 import type { DiscordNotifyOptions } from '@/lib/discord';
+import {
+  loadPhotoStripDraft,
+  clearPhotoStripDraft,
+  isDraftMeaningful,
+  type PhotoStripDraft,
+} from '@/lib/photoStripStorage';
 
 type SortField = 'date' | 'size' | 'type';
 type SortOrder = 'desc' | 'asc';
@@ -50,8 +56,29 @@ export default function Page() {
   const [activeTab, setActiveTab] = useState<'reel' | 'trash'>('reel');
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [dateGrouping, setDateGrouping] = useState<'month' | 'day'>('month');
   const [isDeckMode, setIsDeckMode] = useState<boolean>(false);
   const [isStripStudioOpen, setIsStripStudioOpen] = useState<boolean>(false);
+  const [cachedDraft, setCachedDraft] = useState<PhotoStripDraft | null>(null);
+
+  // Check for in-progress photostrip draft & auto-resume if user was editing when app was backgrounded/closed
+  useEffect(() => {
+    const draft = loadPhotoStripDraft();
+    if (draft && isDraftMeaningful(draft)) {
+      setCachedDraft(draft);
+      if (draft.wasOpen) {
+        setIsStripStudioOpen(true);
+      }
+    }
+  }, []);
+
+  // Sync draft state whenever studio opens or closes
+  useEffect(() => {
+    if (!isStripStudioOpen) {
+      const draft = loadPhotoStripDraft();
+      setCachedDraft(draft && isDraftMeaningful(draft) ? draft : null);
+    }
+  }, [isStripStudioOpen]);
 
   // Trash Multi-Selection states - default to true when in trash
   const [isSelectingTrash, setIsSelectingTrash] = useState<boolean>(true);
@@ -146,6 +173,7 @@ export default function Page() {
               bytes?: number;
               name?: string;
               createdAt?: string;
+              capturedAt?: string;
               isTrashed?: boolean;
             }) => ({
               id: asset.publicId,
@@ -158,6 +186,7 @@ export default function Page() {
               bytes: asset.bytes,
               name: asset.name,
               createdAt: asset.createdAt,
+              capturedAt: asset.capturedAt,
               isTrashed: Boolean(asset.isTrashed),
             })
           );
@@ -171,6 +200,18 @@ export default function Page() {
             const loadedUrls = new Set(
               loaded.map((item) => item.url).filter(Boolean)
             );
+
+            // Revoke blob URLs for items that are now synced with Cloudinary
+            prev.forEach((item) => {
+              if (item.previewUrl && item.previewUrl.startsWith('blob:')) {
+                const isSynced =
+                  (item.key && loadedKeys.has(item.key)) ||
+                  (item.url && loadedUrls.has(item.url));
+                if (isSynced) {
+                  URL.revokeObjectURL(item.previewUrl);
+                }
+              }
+            });
 
             // Keep items from prev that are still uploading, queued, or recently finished but not yet returned by Cloudinary
             const pendingOrUnsynced = prev.filter((item) => {
@@ -329,6 +370,11 @@ export default function Page() {
                   key: res.key,
                   bytes: item.file?.size,
                   createdAt: new Date().toISOString(),
+                  capturedAt:
+                    res.capturedAt ||
+                    (item.file?.lastModified
+                      ? new Date(item.file.lastModified).toISOString()
+                      : undefined),
                   isTrashed: false,
                 }
               : i
@@ -387,6 +433,7 @@ export default function Page() {
         bytes: file.size,
         name: file.name,
         createdAt: new Date().toISOString(),
+        capturedAt: file.lastModified ? new Date(file.lastModified).toISOString() : undefined,
         isTrashed: false,
       }));
 
@@ -410,17 +457,15 @@ export default function Page() {
       (r): r is DiscordNotifyOptions => r !== null && Boolean(r.url)
     );
 
-    // Send a single combined Discord message for all uploaded attachments
+    // Send adaptive Discord notification for all uploaded attachments in background
     if (successful.length > 0) {
-      try {
-        await fetch('/api/discord', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: successful }),
-        });
-      } catch (err) {
+      fetch('/api/discord', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: successful }),
+      }).catch((err) => {
         console.error('Failed to send batch Discord notification:', err);
-      }
+      });
     }
 
     // Re-sync with Cloudinary once all batch uploads complete
@@ -725,8 +770,8 @@ export default function Page() {
 
     return source.sort((a, b) => {
       if (sortField === 'date') {
-        const timeA = new Date(a.createdAt || 0).getTime();
-        const timeB = new Date(b.createdAt || 0).getTime();
+        const timeA = new Date(a.capturedAt || a.createdAt || 0).getTime();
+        const timeB = new Date(b.capturedAt || b.createdAt || 0).getTime();
         return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
       }
 
@@ -741,8 +786,8 @@ export default function Page() {
           const pref = sortOrder === 'desc' ? 'image' : 'video';
           return a.kind === pref ? -1 : 1;
         }
-        const timeA = new Date(a.createdAt || 0).getTime();
-        const timeB = new Date(b.createdAt || 0).getTime();
+        const timeA = new Date(a.capturedAt || a.createdAt || 0).getTime();
+        const timeB = new Date(b.capturedAt || b.createdAt || 0).getTime();
         return timeB - timeA;
       }
 
@@ -753,8 +798,8 @@ export default function Page() {
   // Group memories into stacked decks of cards
   const memoryGroups = useMemo(() => {
     const source = activeTab === 'reel' ? activeItems : trashedItems;
-    return groupMemories(source, sortField, sortOrder);
-  }, [activeTab, activeItems, trashedItems, sortField, sortOrder]);
+    return groupMemories(source, sortField, sortOrder, dateGrouping);
+  }, [activeTab, activeItems, trashedItems, sortField, sortOrder, dateGrouping]);
 
   // Calculate sizes separated by media type (Images vs Videos)
   const imageItems = useMemo(
@@ -956,25 +1001,54 @@ export default function Page() {
             </svg>
           </div>
           <div>
-            <h3 className="font-display font-medium text-sm sm:text-base text-ink leading-tight">
-              Photo Booth Strip Studio
-            </h3>
+            <div className="flex items-center justify-center sm:justify-start gap-2">
+              <h3 className="font-display font-medium text-sm sm:text-base text-ink leading-tight">
+                Memoir Photobooth
+              </h3>
+              {cachedDraft && isDraftMeaningful(cachedDraft) && (
+                <span className="inline-flex items-center gap-1 font-stamp text-[10px] text-rust bg-rust/10 border border-rust/30 px-1.5 py-0.5 rounded-2xs animate-fade-in">
+                  Draft saved {cachedDraft.slotPhotoIds.filter(Boolean).length > 0 ? `(${cachedDraft.slotPhotoIds.filter(Boolean).length} shots)` : ''}
+                </span>
+              )}
+            </div>
             <p className="font-display italic text-xs text-ink/65 mt-0.5">
-              Turn our favorite memories into cute printed photo strips
+              {cachedDraft && isDraftMeaningful(cachedDraft)
+                ? 'Resume your previous photobooth keepsake'
+                : 'Turn our favorite memories into retro photo strips'}
             </p>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setIsStripStudioOpen(true)}
-          className="w-full sm:w-auto px-4 py-2 bg-rust hover:bg-rust-dark text-paper-light font-display font-medium text-xs rounded-xs shadow-print hover:shadow-md transition flex items-center justify-center gap-2 shrink-0 group-hover:scale-[1.01]"
-        >
-          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-          </svg>
-          <span>Create Photo Strip</span>
-        </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          {cachedDraft && isDraftMeaningful(cachedDraft) && (
+            <button
+              type="button"
+              onClick={() => {
+                clearPhotoStripDraft();
+                setCachedDraft(null);
+              }}
+              className="px-3 py-2 text-ink/65 hover:text-rust hover:bg-rust/10 border border-line/70 font-display text-xs rounded-xs transition"
+              title="Discard saved draft"
+            >
+              Start Fresh
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsStripStudioOpen(true)}
+            className="flex-1 sm:flex-initial px-4 py-2 bg-rust hover:bg-rust-dark text-paper-light font-display font-medium text-xs rounded-xs shadow-print hover:shadow-md transition flex items-center justify-center gap-2 shrink-0 group-hover:scale-[1.01]"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+            </svg>
+            <span>
+              {cachedDraft && isDraftMeaningful(cachedDraft)
+                ? 'Resume Photobooth'
+                : 'Create Photo Strip'}
+            </span>
+          </button>
+        </div>
       </div>
 
       <section>
@@ -1225,6 +1299,36 @@ export default function Page() {
                   <span>Type</span>
                 </button>
               </div>
+
+              {/* Daily / Monthly toggle when sorting by Date */}
+              {sortField === 'date' && (
+                <div className="inline-flex rounded-xs border border-line bg-paper-light p-0.5 font-stamp text-[10px] sm:text-[11px] shrink-0 animate-in fade-in duration-200">
+                  <button
+                    type="button"
+                    onClick={() => setDateGrouping('month')}
+                    title="Sort and group memories by month"
+                    className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xs transition ${
+                      dateGrouping === 'month'
+                        ? 'bg-ink text-paper-light font-medium shadow-xs'
+                        : 'text-ink/65 hover:text-ink hover:bg-ink/5'
+                    }`}
+                  >
+                    Monthly
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDateGrouping('day')}
+                    title="Sort and group memories per day"
+                    className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xs transition ${
+                      dateGrouping === 'day'
+                        ? 'bg-ink text-paper-light font-medium shadow-xs'
+                        : 'text-ink/65 hover:text-ink hover:bg-ink/5'
+                    }`}
+                  >
+                    Daily
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Order direction toggle */}
